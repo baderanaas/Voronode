@@ -33,6 +33,11 @@ class ChromaDBClient:
             metadata={"description": "Email threads and communications"},
             embedding_function=self.embedding_function
         )
+        self.invoices_collection = self.client.get_or_create_collection(
+            name="invoices",
+            metadata={"description": "Invoice text for semantic search"},
+            embedding_function=self.embedding_function
+        )
 
     def verify_connectivity(self) -> bool:
         """Test connection to ChromaDB"""

@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     # LLM
     groq_api_key: str
     groq_model: str = "llama-3.3-70b-versatile"
+    groq_extraction_temperature: float = 0.1
+    groq_validation_temperature: float = 0.3
+    groq_max_retries: int = 3
 
     # Embeddings
     openai_api_key: str
@@ -24,6 +27,13 @@ class Settings(BaseSettings):
     # ChromaDB
     chromadb_host: str = "localhost"
     chromadb_port: int = 8000
+
+    # Invoice Processing
+    invoice_extraction_timeout: int = 30
+    enable_semantic_validation: bool = True
+
+    # API
+    api_upload_max_size: int = 10 * 1024 * 1024  # 10MB
 
     # General
     log_level: str = "INFO"
