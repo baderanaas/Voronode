@@ -1,0 +1,43 @@
+[project]
+name = "voronode"
+version = "0.1.0"
+description = "Autonomous Financial Risk & Compliance System for construction finance"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Already installed
+    "groq>=1.0.0",
+    "langgraph>=1.0.8",
+    # LLM & Framework
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    # Graph Database
+    "neo4j>=5.18.0",
+    # Vector Store
+    "chromadb>=0.5.0",
+    "openai>=1.0.0",
+    # Document Processing (PDF to text, then LLM for structuring)
+    "pypdf>=4.0.0",
+    "pdfplumber>=0.11.0",
+    # Data Models & Validation
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "structlog>=24.1.0",
+    # Test Data Generation
+    "faker>=24.0.0",
+    "reportlab>=4.0.0",
+    "openpyxl>=3.1.0",
+    # Data Processing
+    "pandas>=2.2.0",
+    "pytest>=9.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+]
