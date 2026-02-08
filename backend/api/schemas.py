@@ -40,6 +40,11 @@ class InvoiceUploadResponse(BaseModel):
     line_items_count: Optional[int] = None
     validation_anomalies: List[ValidationAnomalyResponse] = []
     processing_time_seconds: Optional[float] = None
+    # Phase 3 additions
+    workflow_id: Optional[str] = None
+    retry_count: Optional[int] = None
+    risk_level: Optional[str] = None
+    requires_review: Optional[bool] = None
 
 
 class InvoiceDetailResponse(BaseModel):
@@ -61,3 +66,39 @@ class HealthResponse(BaseModel):
     status: str
     services: Dict[str, bool]
     timestamp: datetime
+
+
+# Phase 3: Workflow-related schemas
+
+class WorkflowStatusResponse(BaseModel):
+    """Workflow status response."""
+
+    document_id: str
+    status: str
+    paused: bool
+    risk_level: Optional[str] = None
+    retry_count: int
+    created_at: str
+    updated_at: str
+    state: Optional[Dict[str, Any]] = None
+
+
+class QuarantinedWorkflowResponse(BaseModel):
+    """Quarantined workflow response."""
+
+    document_id: str
+    status: str
+    risk_level: Optional[str] = None
+    retry_count: int
+    pause_reason: Optional[str] = None
+    anomalies: List[ValidationAnomalyResponse] = []
+    created_at: str
+    updated_at: str
+
+
+class WorkflowResumeRequest(BaseModel):
+    """Request to resume a quarantined workflow."""
+
+    approved: bool
+    corrections: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None

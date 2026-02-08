@@ -174,6 +174,7 @@ cython_debug/
 .pypirc
 logs/
 .claude
+*.db
 
 # Logs
 logs
@@ -359,6 +360,9 @@ htmlcov/
 # Database
 neo4j_data/
 chroma_data/
+
+# Workflow state databases
+*.db
 
 # Test fixtures
 backend/tests/fixtures/

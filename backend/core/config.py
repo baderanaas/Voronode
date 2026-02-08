@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # API
     api_upload_max_size: int = 10 * 1024 * 1024  # 10MB
 
+    # Workflow configuration (Phase 3)
+    workflow_max_retries: int = 3
+    workflow_checkpoint_db: str = "workflow_checkpoints.db"
+    workflow_state_db: str = "workflow_states.db"
+    workflow_quarantine_high_risk: bool = True
+
     # General
     log_level: str = "INFO"
 
