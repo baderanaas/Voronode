@@ -39,3 +39,4 @@ class WorkflowState(TypedDict):
     processing_time_ms: int
     neo4j_id: Optional[str]  # Neo4j invoice node ID
     extraction_confidence: Optional[float]
+    current_node: Optional[str]  # Current node being executed

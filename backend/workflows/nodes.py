@@ -7,11 +7,14 @@ import structlog
 
 from backend.core.state import WorkflowState
 from backend.core.models import Invoice, LineItem
+from backend.core.config import settings
 from backend.agents.extractor import InvoiceExtractor
 from backend.agents.validator import InvoiceValidator
+from backend.agents.compliance_auditor import ContractComplianceAuditor
 from backend.services.graph_builder import GraphBuilder
 from backend.services.llm_client import GroqClient
 from backend.vector.client import ChromaDBClient
+from backend.graph.client import Neo4jClient
 
 logger = structlog.get_logger()
 
@@ -272,6 +275,105 @@ Return ONLY the correction instructions, be concise and actionable.
         }
 
 
+def compliance_audit_node(state: WorkflowState) -> Dict[str, Any]:
+    """
+    Node 4.5: Audit invoice for contract compliance.
+
+    Validates invoice against contract terms including:
+    - Retention rate
+    - Unit prices
+    - Billing cap
+    - Approved cost codes
+
+    Args:
+        state: Current workflow state with extracted_data
+
+    Returns:
+        Updated state with compliance_anomalies
+    """
+    logger.info(
+        "node_compliance_audit_started",
+        document_id=state["document_id"],
+    )
+
+    # Skip if compliance auditing is disabled
+    if not settings.enable_compliance_audit:
+        logger.info("Compliance audit disabled, skipping")
+        return {"compliance_anomalies": []}
+
+    try:
+        # Convert extracted_data to Invoice model
+        invoice = _dict_to_invoice(state["extracted_data"])
+
+        # Initialize compliance auditor
+        neo4j_client = Neo4jClient()
+        auditor = ContractComplianceAuditor(neo4j_client)
+
+        # Run audit
+        compliance_anomalies = auditor.audit_invoice(invoice)
+
+        # Convert to dicts
+        anomaly_dicts = [
+            {
+                "id": a.id,
+                "type": a.type,
+                "severity": a.severity,
+                "message": a.message,
+                "contract_id": a.contract_id,
+                "contract_clause": a.contract_clause,
+                "expected": a.expected,
+                "actual": a.actual,
+                "detected_at": a.detected_at.isoformat(),
+                "invoice_id": a.invoice_id,
+                "line_item_id": a.line_item_id,
+                "cost_code": a.cost_code,
+            }
+            for a in compliance_anomalies
+        ]
+
+        # Merge with existing anomalies
+        existing_anomalies = state.get("anomalies", [])
+        all_anomalies = existing_anomalies + anomaly_dicts
+
+        # Recalculate risk level with compliance anomalies
+        risk_level = _calculate_risk_level_with_compliance(
+            anomaly_dicts, existing_anomalies
+        )
+
+        logger.info(
+            "node_compliance_audit_success",
+            document_id=state["document_id"],
+            compliance_anomalies_count=len(compliance_anomalies),
+            total_anomalies=len(all_anomalies),
+            risk_level=risk_level,
+        )
+
+        return {
+            "compliance_anomalies": anomaly_dicts,
+            "anomalies": all_anomalies,
+            "risk_level": risk_level,
+            "status": "processing",
+        }
+
+    except Exception as e:
+        error = {
+            "node": "compliance_audit",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        logger.error(
+            "node_compliance_audit_failed",
+            document_id=state["document_id"],
+            error=str(e),
+        )
+
+        return {
+            "error_history": [error],
+            "compliance_anomalies": [],
+        }
+
+
 def quarantine_node(state: WorkflowState) -> Dict[str, Any]:
     """
     Node 5: Pause workflow for human review.
@@ -292,11 +394,15 @@ def quarantine_node(state: WorkflowState) -> Dict[str, Any]:
     retry_count = state.get("retry_count", 0)
     max_retries = state.get("max_retries", 3)
     risk_level = state.get("risk_level", "unknown")
+    compliance_anomalies = state.get("compliance_anomalies", [])
 
     if retry_count >= max_retries:
         pause_reason = f"Max retries ({max_retries}) exceeded"
     elif risk_level in ["high", "critical"]:
-        pause_reason = f"High risk level: {risk_level}"
+        if compliance_anomalies:
+            pause_reason = f"High risk level: {risk_level} (includes {len(compliance_anomalies)} compliance violations)"
+        else:
+            pause_reason = f"High risk level: {risk_level}"
     else:
         pause_reason = "Manual review required"
 
@@ -309,6 +415,7 @@ def quarantine_node(state: WorkflowState) -> Dict[str, Any]:
     return {
         "paused": True,
         "pause_reason": pause_reason,
+        "quarantine_reason": pause_reason,
         "status": "quarantined",
     }
 
@@ -571,10 +678,52 @@ def _dict_to_invoice(invoice_data: Dict[str, Any]) -> Invoice:
     return invoice
 
 
+def _calculate_risk_level_with_compliance(
+    compliance_anomalies: list, validation_anomalies: list
+) -> str:
+    """
+    Calculate risk level considering both validation and compliance anomalies.
+
+    Args:
+        compliance_anomalies: List of compliance anomaly dicts
+        validation_anomalies: List of validation anomaly dicts
+
+    Returns:
+        Risk level: low, medium, high, critical
+    """
+    # Count by severity
+    critical_count = 0
+    high_count = 0
+    medium_count = 0
+
+    for anomaly in compliance_anomalies + validation_anomalies:
+        severity = anomaly.get("severity", "low")
+        if severity == "critical":
+            critical_count += 1
+        elif severity == "high":
+            high_count += 1
+        elif severity == "medium":
+            medium_count += 1
+
+    # Determine risk level
+    if critical_count >= settings.compliance_critical_threshold:
+        return "critical"
+    elif high_count >= settings.compliance_high_threshold:
+        return "high"
+    elif medium_count >= 3:
+        return "medium"
+    elif high_count >= 1 or medium_count >= 1:
+        return "medium"
+    else:
+        return "low"
+
+
 def _get_last_successful_node(state: WorkflowState) -> str:
     """Determine the last successfully completed node."""
     if state.get("graph_updated"):
         return "insert_graph"
+    elif state.get("compliance_anomalies") is not None:
+        return "compliance_audit"
     elif state.get("anomalies") is not None:
         return "validate_invoice"
     elif state.get("extracted_data"):

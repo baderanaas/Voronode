@@ -198,6 +198,42 @@ class WorkflowStore:
 
         return workflows
 
+    def get_all_workflows(self) -> List[Dict[str, Any]]:
+        """
+        Get all workflows regardless of status.
+
+        Returns:
+            List of all workflow states
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT * FROM workflow_states
+            ORDER BY updated_at DESC
+            """
+        )
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        workflows = []
+        for row in rows:
+            workflows.append({
+                "document_id": row["document_id"],
+                "status": row["status"],
+                "paused": bool(row["paused"]),
+                "risk_level": row["risk_level"],
+                "retry_count": row["retry_count"],
+                "state": json.loads(row["state_json"]),
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            })
+
+        return workflows
+
     def delete_workflow(self, document_id: str):
         """
         Delete a workflow state.

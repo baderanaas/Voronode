@@ -17,7 +17,7 @@ AI-powered multi-agent system for construction financial oversight using GraphRA
 - Graph schema defined (Projects, Invoices, Contractors, BudgetLines, etc.)
 - Database infrastructure (Neo4j + ChromaDB via Docker)
 - Core Pydantic models with validation
-- Synthetic test data generation (10 invoice PDFs)
+- Synthetic test data generation (10 invoice PDFs, 5 contracts, 3 project budgets, 10 contractors)
 - Database client wrappers
 
 ### Phase 2: Document Intelligence Agent ✅
@@ -39,7 +39,29 @@ AI-powered multi-agent system for construction financial oversight using GraphRA
 - Quarantine management endpoints
 - **26 workflow tests passing** (100% pass rate)
 
-**Total Tests:** 43/44 passing (98%)
+### Phase 4: UI & Compliance Auditor ✅
+
+**Phase 4A: Streamlit Dashboard**
+- 5-page multi-page Streamlit application for financial oversight teams
+- **Risk Feed:** Real-time monitoring of invoice processing and anomaly alerts
+- **Quarantine Queue:** Interactive approve/reject interface with corrections editor
+- **Upload Invoice:** PDF upload with progress tracking and workflow visualization
+- **Graph Explorer:** Neo4j visualization with custom Cypher queries
+- **Analytics:** Processing metrics, trends, and anomaly distribution charts
+- Reusable UI components (invoice cards, anomaly badges, workflow status)
+- API client wrapper with error handling and caching
+
+**Phase 4B: Contract Compliance Auditor**
+- Automated validation of invoices against contract terms
+- **Retention Rate Validation:** Verify retention calculations match contract terms
+- **Unit Price Validation:** Check line items against contract price schedules (5% tolerance)
+- **Billing Cap Enforcement:** Prevent invoices from exceeding contract values
+- **Scope Validation:** Ensure all cost codes are within approved scope
+- Integrated into LangGraph workflow between validation and graph insertion
+- Configurable thresholds for quarantine triggers
+- **15+ compliance tests passing** (>90% coverage)
+
+**Total Tests:** 58+ passing (includes compliance auditor unit tests)
 
 ## Quick Start
 
@@ -92,6 +114,7 @@ uv run python scripts/setup_chromadb.py
 ```bash
 uv run python scripts/generate_test_data.py
 ```
+Generates 10 invoice PDFs with JSON metadata, 5 contracts, 3 project budgets, 10 contractors, and 3 projects in `backend/tests/fixtures/`.
 
 ### Verify Setup
 
@@ -107,18 +130,41 @@ uv run pytest
 
 ## API Usage
 
-### Start the API Server
+### Start the Backend API Server
 
 ```bash
-uv run uvicorn backend.api.main:app --reload --port 8081
+uv run uvicorn backend.api.main:app --reload --port 8080
 ```
 
-API docs available at: http://localhost:8081/docs
+API docs available at: http://localhost:8080/docs
+
+### Start the Streamlit Dashboard (Phase 4)
+
+```bash
+uv run streamlit run frontend/app.py
+```
+
+Dashboard available at: http://localhost:8501
+
+**Dashboard Features:**
+- Monitor real-time risk alerts and processing metrics
+- Review and approve quarantined invoices through the UI
+- Upload new invoices with visual progress tracking
+- Explore the knowledge graph with interactive visualizations
+- View analytics and trends across all processed invoices
 
 ### Upload Invoice (LangGraph Workflow)
 
+**Option 1: Via Streamlit Dashboard (Recommended)**
+1. Navigate to http://localhost:8501
+2. Go to "Upload Invoice" page
+3. Drag and drop PDF or use file picker
+4. Monitor processing in real-time
+5. Review extracted data and anomalies
+
+**Option 2: Via API**
 ```bash
-curl -X POST http://localhost:8081/api/invoices/upload-graph \
+curl -X POST http://localhost:8080/api/upload \
   -F "file=@invoice.pdf"
 ```
 
@@ -136,41 +182,52 @@ curl -X POST http://localhost:8081/api/invoices/upload-graph \
 }
 ```
 
-### Check Quarantine Queue
+### Manage Quarantined Invoices
 
+**Option 1: Via Streamlit Dashboard (Recommended)**
+1. Go to "Quarantine Queue" page
+2. Review anomalies and extracted data
+3. Choose action:
+   - **Approve:** Accept invoice as-is
+   - **Reject:** Mark as invalid with notes
+   - **Correct & Retry:** Edit fields and re-process
+
+**Option 2: Via API**
+
+**Check Quarantine Queue:**
 ```bash
-curl http://localhost:8081/api/workflows/quarantined
+curl http://localhost:8080/api/workflows/quarantined
 ```
 
-### Resume Quarantined Workflow
-
-**Approve:**
+**Approve Workflow:**
 ```bash
-curl -X POST http://localhost:8081/api/workflows/{workflow_id}/resume \
+curl -X POST http://localhost:8080/api/workflows/{workflow_id}/resume \
   -H "Content-Type: application/json" \
-  -d '{"approved": true, "notes": "Verified with contractor"}'
+  -d '{
+    "action": "approve",
+    "notes": "Verified with contractor"
+  }'
 ```
 
 **Apply Corrections:**
 ```bash
-curl -X POST http://localhost:8081/api/workflows/{workflow_id}/resume \
+curl -X POST http://localhost:8080/api/workflows/{workflow_id}/resume \
   -H "Content-Type: application/json" \
   -d '{
-    "approved": false,
+    "action": "correct",
     "corrections": {"total_amount": 10000.00},
-    "notes": "Corrected total"
+    "notes": "Corrected total amount"
   }'
 ```
 
-### Get Workflow Status
-
+**Get Workflow Status:**
 ```bash
-curl http://localhost:8081/api/workflows/{workflow_id}/status
+curl http://localhost:8080/api/workflows/{workflow_id}
 ```
 
 ## Workflow Architecture
 
-### LangGraph State Machine
+### LangGraph State Machine (Phase 4 with Compliance Audit)
 
 ```
 Upload Invoice
@@ -182,11 +239,21 @@ Structure Invoice (LLM)
     ├─ Failure (retry < 3) → Critic Agent → Retry
     └─ Failure (retry = 3) → Quarantine (Human Review)
     ↓
-Validate Invoice
-    ├─ Low Risk → Insert Graph → Embed Vector → Complete ✅
+Validate Invoice (Anomaly Detection)
+    ├─ Low Risk → Compliance Audit
     ├─ Medium Risk (retry < 3) → Critic Agent → Retry
     └─ High/Critical Risk → Quarantine (Human Review) ⏸️
+    ↓
+Compliance Audit (NEW in Phase 4B)
+    ├─ Clean → Insert Graph → Embed Vector → Complete ✅
+    └─ Violations (Critical/High) → Quarantine (Human Review) ⏸️
 ```
+
+**Compliance Checks:**
+1. **Retention Rate:** Invoice retention matches contract terms
+2. **Unit Prices:** Line item prices within contract schedule (±5% tolerance)
+3. **Billing Cap:** Total billing doesn't exceed contract value
+4. **Scope:** All cost codes are approved for this contract
 
 ### Risk Level Calculation
 
@@ -199,19 +266,16 @@ Validate Invoice
 
 ### Anomaly Types
 
-**High Severity:**
-- Math errors (totals don't match)
-- Missing required fields
-- Total mismatch between invoice and line items
+**Validation Anomalies:**
+- **High Severity:** Math errors, missing fields, total mismatches
+- **Medium Severity:** Future dates, invalid due dates, semantic mismatches
+- **Low Severity:** Invalid invoice number format, minor formatting issues
 
-**Medium Severity:**
-- Future dates
-- Invalid due dates
-- Semantic mismatches (cost code vs description)
-
-**Low Severity:**
-- Invalid invoice number format
-- Minor formatting issues
+**Compliance Anomalies (Phase 4B):**
+- **Critical:** Billing cap exceeded by >10%, contract not found
+- **High:** Unit price exceeds contract by >10%, retention violations >10%, out-of-scope charges
+- **Medium:** Price mismatches 5-10%, retention mismatches 1-10%
+- **Low:** Minor deviations within tolerance
 
 ## Project Structure
 
@@ -219,21 +283,48 @@ Validate Invoice
 voronode/
 ├── backend/
 │   ├── core/           # Config, models, state definitions
-│   ├── graph/          # Neo4j client & schema
+│   ├── db/             # Neo4j client & schema
 │   ├── vector/         # ChromaDB client
-│   ├── agents/         # Extractor & validator agents
-│   ├── services/       # LLM client, graph builder, workflow manager
+│   ├── agents/         # Extractor, validator, compliance auditor
+│   ├── services/       # LLM client, graph builder
 │   ├── workflows/      # LangGraph nodes, routing, workflow definition
-│   ├── storage/        # Workflow state persistence
 │   ├── api/            # FastAPI routes & schemas
 │   └── tests/
-│       ├── unit/       # Model & schema tests
+│       ├── unit/       # Model, schema, compliance tests
 │       ├── integration/# Pipeline tests
 │       └── workflows/  # LangGraph workflow tests
+├── frontend/           # Streamlit dashboard (Phase 4A)
+│   ├── pages/          # Risk Feed, Quarantine Queue, Upload, Graph Explorer, Analytics
+│   ├── components/     # Reusable UI components
+│   ├── utils/          # API client, formatters
+│   └── app.py          # Main entry point
 ├── scripts/            # Setup & data generation
 ├── docker/             # Database containers
 ├── examples/           # Demo scripts
 └── README.md
+
+### Test Fixtures
+
+```
+backend/tests/fixtures/
+├── invoices/           # 10 invoice PDFs + JSON metadata
+│   ├── INV-2024-0001.pdf / .json
+│   └── ...
+├── contracts/          # 5 contract JSON files
+│   ├── CONTRACT-001.json  (Schultz LLC → South Alyssa Tower, clean pass)
+│   ├── CONTRACT-002.json  (Baxter LLC → West George Tower, clean pass)
+│   ├── CONTRACT-003.json  (Edwards-James → South Alyssa Tower, scope violation)
+│   ├── CONTRACT-004.json  (Paul, Kelley and Simmons → Sheltonhaven Tower, price violation)
+│   └── CONTRACT-005.json  (Gates Inc → Sheltonhaven Tower, near billing cap)
+├── budgets/            # Per-project budget lines
+│   ├── PRJ-001-budgets.json  (South Alyssa Tower, 4 cost codes)
+│   ├── PRJ-002-budgets.json  (West George Tower, 3 cost codes)
+│   └── PRJ-003-budgets.json  (Sheltonhaven Tower, 4 cost codes)
+├── projects.json       # 3 active construction projects
+└── contractors.json    # 10 contractors with license numbers
+```
+
+Contracts are designed to create realistic compliance scenarios: clean passes, unit price violations, scope violations (unapproved cost codes), and near-cap billing.
 ```
 
 ## API Endpoints
@@ -289,6 +380,14 @@ WORKFLOW_CHECKPOINT_DB=workflow_checkpoints.db
 WORKFLOW_STATE_DB=workflow_states.db
 WORKFLOW_QUARANTINE_HIGH_RISK=true
 
+# Compliance Auditor (Phase 4B)
+ENABLE_COMPLIANCE_AUDIT=true
+COMPLIANCE_PRICE_TOLERANCE_PERCENT=0.05  # 5% tolerance
+COMPLIANCE_RETENTION_TOLERANCE_PERCENT=0.01  # 1% tolerance
+COMPLIANCE_QUARANTINE_ON_VIOLATION=true
+COMPLIANCE_CRITICAL_THRESHOLD=1  # Quarantine if 1+ critical violations
+COMPLIANCE_HIGH_THRESHOLD=2  # Quarantine if 2+ high violations
+
 # API
 API_UPLOAD_MAX_SIZE=10485760  # 10MB
 ```
@@ -318,13 +417,16 @@ uv run pytest backend/tests/workflows/ -v
 
 ```bash
 # Phase 1: Unit tests (6/6 passing)
-uv run pytest backend/tests/unit/
+uv run pytest backend/tests/unit/test_models.py -v
 
 # Phase 2: Integration tests (11/12 passing)
-uv run pytest backend/tests/integration/
+uv run pytest backend/tests/integration/ -v
 
 # Phase 3: Workflow tests (26/26 passing)
-uv run pytest backend/tests/workflows/
+uv run pytest backend/tests/workflows/ -v
+
+# Phase 4B: Compliance tests (15+ tests passing)
+uv run pytest backend/tests/unit/test_compliance_auditor.py -v
 ```
 
 ## Development
@@ -477,16 +579,26 @@ See `examples/workflow_demo.py` for complete usage examples including:
 - ✅ Phase 1: Knowledge Foundation
 - ✅ Phase 2: Document Intelligence Agent
 - ✅ Phase 3: LangGraph Orchestration
+- ✅ Phase 4A: Streamlit Dashboard
+- ✅ Phase 4B: Contract Compliance Auditor
 
-### Future Enhancements
-- [ ] Async job processing with Celery/RQ
-- [ ] Admin dashboard UI for quarantine management
-- [ ] Workflow visualization (real-time Mermaid diagrams)
-- [ ] Advanced critic agent with RAG
-- [ ] Multi-document batch processing
-- [ ] Cost tracking (LLM token usage)
-- [ ] Prometheus metrics & Grafana dashboards
-- [ ] Multi-tenant support
+### Future Enhancements (Phase 5+)
+- [ ] **Additional Agents:**
+  - [ ] AI Benchmarking Agent (compare costs to historical data)
+  - [ ] Cost-to-Complete Forecaster (burn rate + projections)
+  - [ ] Automated contract term extraction from PDFs
+- [ ] **Production Hardening:**
+  - [ ] React/Next.js migration for external users
+  - [ ] Multi-tenancy and RBAC
+  - [ ] Async job processing with Celery/RQ
+  - [ ] Audit logging
+  - [ ] Prometheus metrics & Grafana dashboards
+- [ ] **Intelligence:**
+  - [ ] RAG-powered critic with historical knowledge
+  - [ ] Predictive risk modeling
+  - [ ] Workflow visualization (real-time Mermaid diagrams)
+  - [ ] Multi-document batch processing
+  - [ ] Cost tracking (LLM token usage)
 
 ## Contributing
 
@@ -502,11 +614,12 @@ See LICENSE file.
 
 ## Support
 
-- **API Documentation:** http://localhost:8081/docs (when server is running)
+- **Streamlit Dashboard:** http://localhost:8501 (Phase 4)
+- **API Documentation:** http://localhost:8080/docs (when server is running)
 - **Neo4j Browser:** http://localhost:7474
 - **ChromaDB API:** http://localhost:8000/docs
 - **Issues:** GitHub Issues
 
 ---
 
-**Built with:** LangGraph • FastAPI • Neo4j • ChromaDB • Groq • OpenAI
+**Built with:** LangGraph • Streamlit • FastAPI • Neo4j • ChromaDB • Groq • OpenAI

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+from decimal import Decimal
 
 
 class Settings(BaseSettings):
@@ -40,6 +41,14 @@ class Settings(BaseSettings):
     workflow_checkpoint_db: str = "workflow_checkpoints.db"
     workflow_state_db: str = "workflow_states.db"
     workflow_quarantine_high_risk: bool = True
+
+    # Compliance Auditor (Phase 4B)
+    enable_compliance_audit: bool = True
+    compliance_price_tolerance_percent: float = 0.05  # 5% tolerance for unit prices
+    compliance_retention_tolerance_percent: float = 0.01  # 1% tolerance for retention
+    compliance_quarantine_on_violation: bool = True  # Quarantine invoices with compliance violations
+    compliance_critical_threshold: int = 1  # Number of critical violations to trigger quarantine
+    compliance_high_threshold: int = 2  # Number of high violations to trigger quarantine
 
     # General
     log_level: str = "INFO"

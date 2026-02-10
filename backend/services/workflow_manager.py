@@ -65,6 +65,7 @@ class WorkflowManager:
             "processing_time_ms": 0,
             "neo4j_id": None,
             "extraction_confidence": None,
+            "current_node": None,
         }
 
         # Execute workflow with checkpointing
@@ -72,37 +73,46 @@ class WorkflowManager:
 
         try:
             final_state = None
+            current_node = None
 
             # Stream through workflow states
-            for state in self.workflow.stream(initial_state, config):
-                logger.debug(
-                    "workflow_state_update",
-                    document_id=document_id,
-                    current_node=list(state.keys())[0] if state else "unknown",
-                )
-
-                # Extract the actual state from the node wrapper
-                if state:
+            for state_update in self.workflow.stream(initial_state, config):
+                if state_update:
                     # LangGraph returns {node_name: state_updates}
-                    final_state = list(state.values())[0]
+                    current_node = list(state_update.keys())[0] if state_update else "unknown"
 
-                    # Persist intermediate state
-                    self.store.save_workflow(document_id, final_state)
+                    logger.debug(
+                        "workflow_state_update",
+                        document_id=document_id,
+                        current_node=current_node,
+                    )
+
+            # Get the final accumulated state from the workflow
+            # This contains ALL fields, not just the last node's updates
+            final_state_snapshot = self.workflow.get_state(config)
+            if final_state_snapshot and final_state_snapshot.values:
+                final_state = dict(final_state_snapshot.values)
+
+                # Ensure document_id and current_node are present
+                final_state["document_id"] = document_id
+                final_state["current_node"] = current_node
+
+                # Persist final state
+                self.store.save_workflow(document_id, final_state)
 
             # Calculate total processing time
             processing_time_ms = int((time.time() - start_time) * 1000)
 
             if final_state:
+                # Add processing time
                 final_state["processing_time_ms"] = processing_time_ms
-
-                # Save final state
-                self.store.save_workflow(document_id, final_state)
 
                 logger.info(
                     "workflow_execution_complete",
                     document_id=document_id,
                     status=final_state.get("status"),
                     processing_time_ms=processing_time_ms,
+                    current_node=final_state.get("current_node"),
                 )
 
                 return final_state
@@ -114,6 +124,7 @@ class WorkflowManager:
 
             error_state = {
                 **initial_state,
+                "document_id": document_id,  # Ensure document_id is present
                 "status": "failed",
                 "error_history": [
                     {
@@ -199,21 +210,36 @@ class WorkflowManager:
         config = {"configurable": {"thread_id": document_id}}
 
         try:
-            final_state = None
+            current_node = None
 
             # Continue workflow from quarantine
-            for s in self.workflow.stream(state, config):
-                if s:
-                    final_state = list(s.values())[0]
-                    self.store.save_workflow(document_id, final_state)
+            for state_update in self.workflow.stream(state, config):
+                if state_update:
+                    current_node = list(state_update.keys())[0] if state_update else "unknown"
 
-            logger.info(
-                "workflow_resume_complete",
-                document_id=document_id,
-                final_status=final_state.get("status") if final_state else "unknown",
-            )
+            # Get the final accumulated state
+            final_state_snapshot = self.workflow.get_state(config)
+            if final_state_snapshot and final_state_snapshot.values:
+                final_state = dict(final_state_snapshot.values)
+                final_state["document_id"] = document_id
+                final_state["current_node"] = current_node
 
-            return final_state or state
+                # Save final state
+                self.store.save_workflow(document_id, final_state)
+
+                logger.info(
+                    "workflow_resume_complete",
+                    document_id=document_id,
+                    final_status=final_state.get("status"),
+                    current_node=current_node,
+                )
+
+                return final_state
+            else:
+                # Fallback to original state
+                state["document_id"] = document_id
+                state["current_node"] = current_node
+                return state
 
         except Exception as e:
             logger.error(
@@ -270,3 +296,25 @@ class WorkflowManager:
             List of workflow states
         """
         return self.store.get_all_by_status(status)
+
+    def list_workflows(self, status: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        List all workflows, optionally filtered by status.
+
+        Args:
+            status: Optional status filter
+            limit: Maximum number of workflows to return
+
+        Returns:
+            List of workflow states
+        """
+        if status:
+            workflows = self.store.get_all_by_status(status)
+        else:
+            workflows = self.store.get_all_workflows()
+
+        # Sort by created_at descending (newest first)
+        workflows.sort(key=lambda w: w.get("created_at", ""), reverse=True)
+
+        # Apply limit
+        return workflows[:limit]

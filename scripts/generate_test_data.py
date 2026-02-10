@@ -62,6 +62,167 @@ def generate_invoice_pdf(output_path: Path, invoice_data: dict):
     c.save()
 
 
+# --- Static reference data for contracts, projects, contractors, budgets ---
+
+PROJECTS = [
+    {
+        "id": "PRJ-001",
+        "name": "South Alyssa Tower",
+        "budget": 2500000.00,
+        "start_date": "2025-06-01",
+        "end_date": "2026-12-31",
+        "status": "active",
+    },
+    {
+        "id": "PRJ-002",
+        "name": "West George Tower",
+        "budget": 1800000.00,
+        "start_date": "2025-08-01",
+        "end_date": "2027-02-28",
+        "status": "active",
+    },
+    {
+        "id": "PRJ-003",
+        "name": "Sheltonhaven Tower",
+        "budget": 3200000.00,
+        "start_date": "2025-04-15",
+        "end_date": "2027-06-30",
+        "status": "active",
+    },
+]
+
+CONTRACTORS = [
+    {"id": "CONT-001", "name": "Schultz LLC", "license_number": "LIC-2024-0001", "rating": 4.2},
+    {"id": "CONT-002", "name": "Baxter LLC", "license_number": "LIC-2024-0002", "rating": 3.8},
+    {"id": "CONT-003", "name": "Edwards-James", "license_number": "LIC-2024-0003", "rating": 4.5},
+    {"id": "CONT-004", "name": "Paul, Kelley and Simmons", "license_number": "LIC-2024-0004", "rating": 3.5},
+    {"id": "CONT-005", "name": "Gates Inc", "license_number": "LIC-2024-0005", "rating": 4.0},
+    {"id": "CONT-006", "name": "Wolfe-Bennett", "license_number": "LIC-2024-0006", "rating": 4.1},
+    {"id": "CONT-007", "name": "Vance-Church", "license_number": "LIC-2024-0007", "rating": 3.9},
+    {"id": "CONT-008", "name": "Jones Ltd", "license_number": "LIC-2024-0008", "rating": 4.3},
+    {"id": "CONT-009", "name": "Thompson-Sandoval", "license_number": "LIC-2024-0009", "rating": 3.7},
+    {"id": "CONT-010", "name": "Holmes, Berry and Holt", "license_number": "LIC-2024-0010", "rating": 4.4},
+]
+
+CONTRACTS = [
+    {
+        "contract_id": "CONTRACT-001",
+        "contractor_id": "CONT-001",
+        "project_id": "PRJ-001",
+        "value": 250000.00,
+        "retention_rate": 0.10,
+        "start_date": "2025-06-01",
+        "end_date": "2026-12-31",
+        "terms": "Standard construction contract for structural, electrical, site prep, and plumbing work on South Alyssa Tower. Retention of 10% applies to all progress payments.",
+        "unit_price_schedule": {"01-100": 450.00, "05-500": 460.00, "15-100": 250.00, "16-100": 400.00},
+        "approved_cost_codes": ["01-100", "05-500", "15-100", "16-100"],
+    },
+    {
+        "contract_id": "CONTRACT-002",
+        "contractor_id": "CONT-002",
+        "project_id": "PRJ-002",
+        "value": 180000.00,
+        "retention_rate": 0.05,
+        "start_date": "2025-08-01",
+        "end_date": "2027-02-28",
+        "terms": "Site preparation, structural steel, and painting contract for West George Tower. 5% retention on all invoices.",
+        "unit_price_schedule": {"01-100": 450.00, "05-500": 300.00, "09-900": 350.00},
+        "approved_cost_codes": ["01-100", "05-500", "09-900"],
+    },
+    {
+        "contract_id": "CONTRACT-003",
+        "contractor_id": "CONT-003",
+        "project_id": "PRJ-001",
+        "value": 200000.00,
+        "retention_rate": 0.10,
+        "start_date": "2025-07-01",
+        "end_date": "2026-12-31",
+        "terms": "Electrical and structural steel contract for South Alyssa Tower. Scope limited to electrical and steel work only. 10% retention applies.",
+        "unit_price_schedule": {"05-500": 450.00, "16-100": 350.00},
+        "approved_cost_codes": ["05-500", "16-100"],
+    },
+    {
+        "contract_id": "CONTRACT-004",
+        "contractor_id": "CONT-004",
+        "project_id": "PRJ-003",
+        "value": 300000.00,
+        "retention_rate": 0.10,
+        "start_date": "2025-04-15",
+        "end_date": "2027-06-30",
+        "terms": "Concrete and painting contract for Sheltonhaven Tower. All concrete unit prices capped per schedule. 10% retention on progress payments.",
+        "unit_price_schedule": {"03-300": 450.00, "09-900": 425.00},
+        "approved_cost_codes": ["03-300", "09-900"],
+    },
+    {
+        "contract_id": "CONTRACT-005",
+        "contractor_id": "CONT-005",
+        "project_id": "PRJ-003",
+        "value": 120000.00,
+        "retention_rate": 0.05,
+        "start_date": "2025-05-01",
+        "end_date": "2027-06-30",
+        "terms": "Concrete, structural steel, and plumbing contract for Sheltonhaven Tower. Billing cap of $120,000. 5% retention applies.",
+        "unit_price_schedule": {"03-300": 400.00, "05-500": 460.00, "15-100": 250.00},
+        "approved_cost_codes": ["03-300", "05-500", "15-100"],
+    },
+]
+
+BUDGETS = {
+    "PRJ-001": [
+        {"id": "BUD-001-01", "project_id": "PRJ-001", "cost_code": "01-100", "description": "Site Preparation", "allocated": 400000.00, "spent": 145000.00, "remaining": 255000.00},
+        {"id": "BUD-001-02", "project_id": "PRJ-001", "cost_code": "05-500", "description": "Structural Steel", "allocated": 800000.00, "spent": 310000.00, "remaining": 490000.00},
+        {"id": "BUD-001-03", "project_id": "PRJ-001", "cost_code": "15-100", "description": "Plumbing", "allocated": 350000.00, "spent": 88000.00, "remaining": 262000.00},
+        {"id": "BUD-001-04", "project_id": "PRJ-001", "cost_code": "16-100", "description": "Electrical", "allocated": 600000.00, "spent": 420000.00, "remaining": 180000.00},
+    ],
+    "PRJ-002": [
+        {"id": "BUD-002-01", "project_id": "PRJ-002", "cost_code": "01-100", "description": "Site Preparation", "allocated": 300000.00, "spent": 95000.00, "remaining": 205000.00},
+        {"id": "BUD-002-02", "project_id": "PRJ-002", "cost_code": "05-500", "description": "Structural Steel", "allocated": 500000.00, "spent": 185000.00, "remaining": 315000.00},
+        {"id": "BUD-002-03", "project_id": "PRJ-002", "cost_code": "09-900", "description": "Painting", "allocated": 250000.00, "spent": 232000.00, "remaining": 18000.00},
+    ],
+    "PRJ-003": [
+        {"id": "BUD-003-01", "project_id": "PRJ-003", "cost_code": "03-300", "description": "Concrete Work", "allocated": 900000.00, "spent": 540000.00, "remaining": 360000.00},
+        {"id": "BUD-003-02", "project_id": "PRJ-003", "cost_code": "05-500", "description": "Structural Steel", "allocated": 750000.00, "spent": 290000.00, "remaining": 460000.00},
+        {"id": "BUD-003-03", "project_id": "PRJ-003", "cost_code": "09-900", "description": "Painting", "allocated": 350000.00, "spent": 110000.00, "remaining": 240000.00},
+        {"id": "BUD-003-04", "project_id": "PRJ-003", "cost_code": "15-100", "description": "Plumbing", "allocated": 400000.00, "spent": 385000.00, "remaining": 15000.00},
+    ],
+}
+
+
+def generate_projects(fixtures_dir: Path):
+    """Write projects.json fixture."""
+    path = fixtures_dir / "projects.json"
+    with open(path, "w") as f:
+        json.dump(PROJECTS, f, indent=2)
+    print(f"Generated: {path.name} ({len(PROJECTS)} projects)")
+
+
+def generate_contractors(fixtures_dir: Path):
+    """Write contractors.json fixture."""
+    path = fixtures_dir / "contractors.json"
+    with open(path, "w") as f:
+        json.dump(CONTRACTORS, f, indent=2)
+    print(f"Generated: {path.name} ({len(CONTRACTORS)} contractors)")
+
+
+def generate_contracts(contracts_dir: Path):
+    """Write individual contract JSON fixtures."""
+    for contract in CONTRACTS:
+        path = contracts_dir / f"{contract['contract_id']}.json"
+        with open(path, "w") as f:
+            json.dump(contract, f, indent=2)
+        print(f"Generated: {path.name}")
+    print(f"  -> {len(CONTRACTS)} contracts in {contracts_dir}")
+
+
+def generate_budgets(budgets_dir: Path):
+    """Write per-project budget JSON fixtures."""
+    for project_id, lines in BUDGETS.items():
+        path = budgets_dir / f"{project_id}-budgets.json"
+        with open(path, "w") as f:
+            json.dump(lines, f, indent=2)
+        print(f"Generated: {path.name} ({len(lines)} budget lines)")
+
+
 def main():
     fixtures_dir = Path(__file__).parent.parent / "backend/tests/fixtures"
     invoices_dir = fixtures_dir / "invoices"
@@ -130,7 +291,15 @@ def main():
 
         print(f"Generated: {pdf_path.name}")
 
-    print(f"\n✅ Generated 10 test invoices in {invoices_dir}")
+    print(f"\nGenerated 10 test invoices in {invoices_dir}")
+
+    # Generate contracts, projects, contractors, budgets
+    generate_projects(fixtures_dir)
+    generate_contractors(fixtures_dir)
+    generate_contracts(contracts_dir)
+    generate_budgets(budgets_dir)
+
+    print(f"\nAll fixtures generated in {fixtures_dir}")
 
 
 if __name__ == "__main__":

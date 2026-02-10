@@ -1,6 +1,7 @@
 """LangGraph StateGraph definition for invoice processing workflow."""
 
 import os
+import sqlite3
 from typing import Optional
 import structlog
 
@@ -12,6 +13,7 @@ from backend.workflows.nodes import (
     extract_text_node,
     structure_invoice_node,
     validate_invoice_node,
+    compliance_audit_node,
     critic_agent_node,
     quarantine_node,
     insert_graph_node,
@@ -23,6 +25,7 @@ from backend.workflows.routing import (
     check_for_critical_failure,
     should_retry_extraction,
     route_by_validation_severity,
+    route_by_compliance_severity,
     should_continue_after_graph,
 )
 from backend.core.config import settings
@@ -34,16 +37,17 @@ def create_invoice_workflow_graph() -> StateGraph:
     """
     Create the LangGraph StateGraph for invoice processing.
 
-    Workflow:
+    Workflow (Phase 4 with Compliance Auditor):
     1. extract_text → structure_invoice
     2. structure_invoice → [validate | retry (critic) | quarantine]
     3. critic → structure_invoice (retry loop)
-    4. validate → [insert_graph | correctable (critic) | quarantine]
-    5. insert_graph → [embed | finalize]
-    6. embed → finalize
-    7. finalize → END
-    8. quarantine → END
-    9. error_handler → END
+    4. validate → [compliance_audit | correctable (critic) | quarantine]
+    5. compliance_audit → [insert_graph | quarantine]
+    6. insert_graph → [embed | finalize]
+    7. embed → finalize
+    8. finalize → END
+    9. quarantine → END
+    10. error_handler → END
 
     Returns:
         Compiled StateGraph
@@ -56,6 +60,7 @@ def create_invoice_workflow_graph() -> StateGraph:
     workflow.add_node("extract_text", extract_text_node)
     workflow.add_node("structure_invoice", structure_invoice_node)
     workflow.add_node("validate", validate_invoice_node)
+    workflow.add_node("compliance_audit", compliance_audit_node)
     workflow.add_node("critic", critic_agent_node)
     workflow.add_node("quarantine", quarantine_node)
     workflow.add_node("insert_graph", insert_graph_node)
@@ -83,11 +88,18 @@ def create_invoice_workflow_graph() -> StateGraph:
     # Edge 3: critic → structure_invoice (retry loop)
     workflow.add_edge("critic", "structure_invoice")
 
-    # Edge 4: validate → [insert_graph (clean) | critic (correctable) | quarantine]
+    # Edge 4: validate → [compliance_audit (clean) | critic (correctable) | quarantine]
     workflow.add_conditional_edges(
         "validate",
         route_by_validation_severity,
-        {"clean": "insert_graph", "correctable": "critic", "quarantine": "quarantine"},
+        {"clean": "compliance_audit", "correctable": "critic", "quarantine": "quarantine"},
+    )
+
+    # Edge 4.5: compliance_audit → [insert_graph (clean) | quarantine (violations)]
+    workflow.add_conditional_edges(
+        "compliance_audit",
+        route_by_compliance_severity,
+        {"clean": "insert_graph", "quarantine": "quarantine"},
     )
 
     # Edge 5: insert_graph → [embed | finalize]
@@ -129,8 +141,9 @@ def compile_workflow_with_checkpoints(
 
     workflow = create_invoice_workflow_graph()
 
-    # Create checkpoint saver
-    checkpointer = SqliteSaver.from_conn_string(checkpoint_path)
+    # Create checkpoint saver with a persistent connection
+    conn = sqlite3.connect(checkpoint_path, check_same_thread=False)
+    checkpointer = SqliteSaver(conn)
 
     # Compile workflow
     compiled_workflow = workflow.compile(checkpointer=checkpointer)

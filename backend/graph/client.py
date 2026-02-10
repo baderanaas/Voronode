@@ -1,4 +1,5 @@
 from neo4j import GraphDatabase
+from neo4j.graph import Node, Relationship
 from typing import List, Dict, Any, Optional
 from backend.core.config import settings
 import structlog
@@ -26,11 +27,46 @@ class Neo4jClient:
             logger.error("neo4j_connection_failed", error=str(e))
             return False
 
+    def _serialize_neo4j_value(self, value):
+        """Convert Neo4j types to JSON-serializable types."""
+        if isinstance(value, Node):
+            # Neo4j Node - include both element_id and properties
+            props = dict(value)
+            return {
+                "_element_id": value.element_id,  # Neo4j internal ID
+                "_labels": list(value.labels),  # Node labels
+                **props,  # Node properties (includes 'id' field)
+            }
+        elif isinstance(value, Relationship):
+            # Neo4j Relationship
+            props = dict(value)
+            return {
+                "_relationship": True,
+                "type": value.type,
+                "start": value.start_node.element_id,
+                "end": value.end_node.element_id,
+                **props,  # Relationship properties
+            }
+        elif isinstance(value, list):
+            return [self._serialize_neo4j_value(item) for item in value]
+        elif isinstance(value, dict):
+            return {k: self._serialize_neo4j_value(v) for k, v in value.items()}
+        else:
+            return value
+
     def run_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> List[Dict]:
-        """Execute Cypher query and return results"""
+        """Execute Cypher query and return results with Neo4j objects serialized."""
         with self.driver.session() as session:
             result = session.run(query, parameters or {})
-            return [record.data() for record in result]
+            records = []
+            for record in result:
+                # Serialize each value in the record
+                serialized_record = {}
+                for key in record.keys():
+                    value = record[key]
+                    serialized_record[key] = self._serialize_neo4j_value(value)
+                records.append(serialized_record)
+            return records
 
     def run_migration(self, cypher_file_path: str):
         """Execute migration script"""

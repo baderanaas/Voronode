@@ -4,6 +4,7 @@ from typing import Literal
 import structlog
 
 from backend.core.state import WorkflowState
+from backend.core.config import settings
 
 logger = structlog.get_logger()
 
@@ -138,6 +139,71 @@ def route_by_validation_severity(
         route="quarantine",
     )
     return "quarantine"
+
+
+def route_by_compliance_severity(
+    state: WorkflowState,
+) -> Literal["clean", "quarantine"]:
+    """
+    Route after compliance_audit_node based on compliance violations.
+
+    Logic:
+    - No compliance anomalies → "clean" (proceed to graph insertion)
+    - Has critical compliance violations → "quarantine" (human review)
+    - Has high severity violations above threshold → "quarantine"
+    - Otherwise → "clean" (proceed with warnings)
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Routing decision
+    """
+    if not settings.enable_compliance_audit:
+        # If compliance auditing is disabled, always proceed
+        return "clean"
+
+    compliance_anomalies = state.get("compliance_anomalies", [])
+
+    if not compliance_anomalies:
+        logger.info(
+            "routing_compliance_clean",
+            document_id=state["document_id"],
+            route="clean",
+        )
+        return "clean"
+
+    # Count by severity
+    critical_count = sum(1 for a in compliance_anomalies if a.get("severity") == "critical")
+    high_count = sum(1 for a in compliance_anomalies if a.get("severity") == "high")
+
+    # Quarantine if above thresholds
+    if critical_count >= settings.compliance_critical_threshold:
+        logger.warning(
+            "routing_compliance_quarantine_critical",
+            document_id=state["document_id"],
+            critical_count=critical_count,
+            route="quarantine",
+        )
+        return "quarantine"
+
+    if high_count >= settings.compliance_high_threshold:
+        logger.warning(
+            "routing_compliance_quarantine_high",
+            document_id=state["document_id"],
+            high_count=high_count,
+            route="quarantine",
+        )
+        return "quarantine"
+
+    # Below threshold - proceed with warnings
+    logger.info(
+        "routing_compliance_clean_with_warnings",
+        document_id=state["document_id"],
+        anomalies_count=len(compliance_anomalies),
+        route="clean",
+    )
+    return "clean"
 
 
 def should_continue_after_graph(

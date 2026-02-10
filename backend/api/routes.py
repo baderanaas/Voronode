@@ -483,3 +483,131 @@ async def get_workflow_status(document_id: str):
     except Exception as e:
         logger.error("workflow_status_failed", document_id=document_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e}")
+
+
+@router.get("/workflows")
+async def list_workflows(status: str = None, limit: int = 100):
+    """
+    List all workflows, optionally filtered by status.
+
+    Args:
+        status: Optional status filter (completed, quarantined, processing, failed)
+        limit: Maximum number of workflows to return
+
+    Returns:
+        List of workflows
+    """
+    logger.info("workflows_list_requested", status=status, limit=limit)
+
+    try:
+        workflows = workflow_manager.list_workflows(status=status, limit=limit)
+        return workflows
+
+    except Exception as e:
+        logger.error("workflows_list_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to list workflows: {e}")
+
+
+@router.get("/workflows/{workflow_id}")
+async def get_workflow(workflow_id: str):
+    """
+    Get detailed workflow information by ID.
+
+    Args:
+        workflow_id: Workflow ID (document_id)
+
+    Returns:
+        Complete workflow state and metadata
+    """
+    logger.info("workflow_get_requested", workflow_id=workflow_id)
+
+    try:
+        workflow = workflow_manager.get_workflow_status(workflow_id)
+
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        return workflow
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("workflow_get_failed", workflow_id=workflow_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow: {e}")
+
+
+@router.get("/graph/stats")
+async def get_graph_stats():
+    """
+    Get Neo4j graph database statistics.
+
+    Returns:
+        Node counts, relationship counts, and other graph metrics
+    """
+    logger.info("graph_stats_requested")
+
+    try:
+        neo4j_client = Neo4jClient()
+
+        # Count nodes by label
+        node_counts_query = """
+        MATCH (n)
+        RETURN labels(n)[0] as label, count(*) as count
+        """
+        node_results = neo4j_client.run_query(node_counts_query)
+
+        # Count relationships
+        rel_count_query = """
+        MATCH ()-[r]->()
+        RETURN count(r) as count
+        """
+        rel_results = neo4j_client.run_query(rel_count_query)
+
+        # Build response
+        stats = {
+            "total_nodes": sum(r["count"] for r in node_results),
+            "total_relationships": rel_results[0]["count"] if rel_results else 0,
+        }
+
+        # Add individual node type counts
+        for result in node_results:
+            label = result["label"]
+            count = result["count"]
+            stats[f"{label.lower()}_count"] = count
+
+        logger.info("graph_stats_retrieved", stats=stats)
+        return stats
+
+    except Exception as e:
+        logger.error("graph_stats_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to get graph stats: {e}")
+
+
+@router.post("/graph/query")
+async def query_graph(query: dict):
+    """
+    Execute custom Cypher query on Neo4j.
+
+    Args:
+        query: Dictionary with 'query' key containing Cypher query string
+
+    Returns:
+        Query results as list of records
+    """
+    cypher_query = query.get("query")
+
+    if not cypher_query:
+        raise HTTPException(status_code=400, detail="Missing 'query' in request body")
+
+    logger.info("graph_query_requested", query=cypher_query[:100])
+
+    try:
+        neo4j_client = Neo4jClient()
+        results = neo4j_client.run_query(cypher_query)
+
+        logger.info("graph_query_executed", record_count=len(results))
+        return {"records": results, "count": len(results)}
+
+    except Exception as e:
+        logger.error("graph_query_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Query execution failed: {e}")
