@@ -288,6 +288,243 @@ except Exception as e:
 
 st.markdown("---")
 
+# Budget Variance Analysis
+st.markdown("## 💰 Budget Variance Analysis")
+
+try:
+    # Get all projects with budgets
+    projects = graph_stats.get("projects", [])
+
+    if not projects:
+        # If projects not in graph_stats, try to get from budgets
+        st.info("Loading budget data...")
+
+    # Collect budget variance data across all projects
+    all_variances = []
+    project_summaries = []
+
+    # Get list of projects (simplified - would ideally come from graph_stats)
+    # For now, try common project IDs
+    test_project_ids = ["PRJ-001", "PRJ-002", "PRJ-003"]
+
+    for project_id in test_project_ids:
+        try:
+            project_budgets = api.get_project_budgets(project_id)
+
+            if project_budgets and project_budgets.get("budgets"):
+                for budget in project_budgets["budgets"]:
+                    budget_id = budget.get("id")
+
+                    # Get variance details
+                    variance = api.get_budget_variance(budget_id)
+
+                    if variance:
+                        project_summaries.append({
+                            "Project": budget.get("project_name", project_id),
+                            "Budget ID": budget_id,
+                            "Total Allocated": budget.get("total_allocated", 0),
+                            "Total Spent": budget.get("total_spent", 0),
+                            "Variance %": variance.get("overall_variance", 0),
+                            "Variance $": variance.get("overall_variance_amount", 0),
+                            "Overruns": len(variance.get("overrun_lines", [])),
+                            "At Risk": len(variance.get("at_risk_lines", [])),
+                        })
+
+                        all_variances.extend(variance.get("line_variances", []))
+        except:
+            pass
+
+    if project_summaries:
+        st.success(f"✅ Loaded budget data for {len(project_summaries)} project(s)")
+
+        # Overall metrics
+        col1, col2, col3, col4 = st.columns(4)
+
+        total_allocated = sum(p["Total Allocated"] for p in project_summaries)
+        total_spent = sum(p["Total Spent"] for p in project_summaries)
+        total_variance = ((total_spent - total_allocated) / total_allocated * 100) if total_allocated > 0 else 0
+        total_overruns = sum(p["Overruns"] for p in project_summaries)
+
+        with col1:
+            st.metric("Total Budget", format_currency(total_allocated))
+
+        with col2:
+            st.metric("Total Spent", format_currency(total_spent))
+
+        with col3:
+            variance_color = "🔴" if total_variance > 10 else ("🟡" if total_variance > 0 else "🟢")
+            st.metric(
+                "Overall Variance",
+                f"{variance_color} {total_variance:.2f}%",
+                delta=format_currency(total_spent - total_allocated)
+            )
+
+        with col4:
+            st.metric("Budget Overruns", total_overruns)
+
+        # Project summary table
+        st.markdown("### Budget Summary by Project")
+
+        import pandas as pd
+        df_summary = pd.DataFrame(project_summaries)
+
+        st.dataframe(
+            df_summary.style.format({
+                "Total Allocated": "${:,.2f}",
+                "Total Spent": "${:,.2f}",
+                "Variance %": "{:.2f}%",
+                "Variance $": "${:,.2f}",
+            }),
+            use_container_width=True,
+        )
+
+        # Variance distribution across all cost codes
+        if all_variances:
+            st.markdown("### Cost Code Variance Distribution")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Top overruns
+                sorted_variances = sorted(
+                    all_variances,
+                    key=lambda x: x.get("variance_amount", 0),
+                    reverse=True
+                )
+
+                top_overruns = [v for v in sorted_variances if v.get("variance_amount", 0) > 0][:10]
+
+                if top_overruns:
+                    st.markdown("**Top 10 Overruns**")
+
+                    overrun_df = pd.DataFrame([
+                        {
+                            "Cost Code": v["cost_code"],
+                            "Description": v["description"][:30] + "..." if len(v["description"]) > 30 else v["description"],
+                            "Variance": v["variance_amount"],
+                            "Variance %": v["variance_percent"],
+                        }
+                        for v in top_overruns
+                    ])
+
+                    st.dataframe(
+                        overrun_df.style.format({
+                            "Variance": "${:,.2f}",
+                            "Variance %": "{:.1f}%",
+                        }),
+                        use_container_width=True,
+                    )
+
+            with col2:
+                # Top underruns (under budget)
+                top_underruns = [v for v in sorted_variances if v.get("variance_amount", 0) < 0][:10]
+
+                if top_underruns:
+                    st.markdown("**Top 10 Under Budget**")
+
+                    underrun_df = pd.DataFrame([
+                        {
+                            "Cost Code": v["cost_code"],
+                            "Description": v["description"][:30] + "..." if len(v["description"]) > 30 else v["description"],
+                            "Remaining": abs(v["variance_amount"]),
+                            "Utilization %": v["utilization_percent"],
+                        }
+                        for v in top_underruns
+                    ])
+
+                    st.dataframe(
+                        underrun_df.style.format({
+                            "Remaining": "${:,.2f}",
+                            "Utilization %": "{:.1f}%",
+                        }),
+                        use_container_width=True,
+                    )
+
+            # Variance histogram
+            st.markdown("### Variance Distribution Across All Cost Codes")
+
+            variance_pcts = [v.get("variance_percent", 0) for v in all_variances]
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Histogram(
+                x=variance_pcts,
+                nbinsx=30,
+                marker_color="#4A90E2",
+                name="Cost Codes",
+            ))
+
+            fig.add_vline(
+                x=0,
+                line_dash="dash",
+                line_color="green",
+                annotation_text="On Budget",
+                annotation_position="top right"
+            )
+
+            fig.add_vline(
+                x=10,
+                line_dash="dash",
+                line_color="orange",
+                annotation_text="10% Over",
+                annotation_position="top right"
+            )
+
+            fig.update_layout(
+                title="Budget Variance Distribution",
+                xaxis_title="Variance (%)",
+                yaxis_title="Number of Cost Codes",
+                showlegend=False,
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Utilization analysis
+            st.markdown("### Budget Utilization Analysis")
+
+            utilization_data = []
+            for v in all_variances:
+                util_pct = v.get("utilization_percent", 0)
+
+                if util_pct > 90:
+                    category = "At Risk (>90%)"
+                elif util_pct > 75:
+                    category = "High (75-90%)"
+                elif util_pct > 50:
+                    category = "Medium (50-75%)"
+                elif util_pct > 25:
+                    category = "Low (25-50%)"
+                else:
+                    category = "Minimal (<25%)"
+
+                utilization_data.append(category)
+
+            util_counts = Counter(utilization_data)
+
+            fig = px.pie(
+                values=list(util_counts.values()),
+                names=list(util_counts.keys()),
+                title="Budget Utilization Categories",
+                color_discrete_sequence=["#DC143C", "#FFA500", "#FFD700", "#90EE90", "#4A90E2"],
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.info("""
+        **No budget data available**
+
+        Upload budgets via the **Upload Budget** page to see variance analysis here.
+        """)
+
+except Exception as e:
+    st.warning(f"Could not load budget variance data: {e}")
+    import traceback
+    with st.expander("Error Details"):
+        st.code(traceback.format_exc())
+
+st.markdown("---")
+
 # Trend Analysis
 st.markdown("## 📈 Trend Analysis")
 

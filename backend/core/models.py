@@ -81,6 +81,20 @@ class BudgetLine(BaseModel):
     remaining: Decimal
 
 
+class Budget(BaseModel):
+    """Complete project budget with metadata."""
+    id: str
+    project_id: str
+    project_name: Optional[str] = None
+    total_allocated: Decimal
+    total_spent: Decimal = Decimal(0)
+    total_remaining: Decimal
+    line_count: int
+    extracted_at: Optional[datetime] = None
+    validation_warnings: List[str] = Field(default_factory=list)
+    status: str = "active"  # active, archived, superseded
+
+
 class RiskFactor(BaseModel):
     id: str
     type: str  # budget_overrun, payment_delay, compliance_violation

@@ -20,6 +20,10 @@ from backend.api.schemas import (
     WorkflowResumeRequest,
     ContractUploadResponse,
     ContractDetailResponse,
+    BudgetUploadResponse,
+    BudgetDetailResponse,
+    BudgetVarianceResponse,
+    BudgetLineResponse,
 )
 from backend.agents.extractor import InvoiceExtractor
 from backend.agents.validator import InvoiceValidator
@@ -704,6 +708,285 @@ async def get_contract(contract_id: str):
     except Exception as e:
         logger.error("contract_detail_failed", contract_id=contract_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve contract: {e}")
+
+
+@router.post("/budgets/upload", response_model=BudgetUploadResponse)
+async def upload_budget(file: UploadFile = File(...)):
+    """
+    Upload and process a budget Excel/CSV file.
+
+    Pipeline:
+    1. Save uploaded file to temp
+    2. Extract with BudgetExtractor (pandas + Groq/Llama3)
+    3. Validate budget data
+    4. Insert into Neo4j graph
+    5. Return budget summary
+
+    Args:
+        file: Excel (.xlsx, .xls) or CSV file
+
+    Returns:
+        Budget upload response with summary
+    """
+    start_time = time.time()
+
+    logger.info("budget_upload_started", filename=file.filename)
+
+    # Validate file type
+    if not file.filename.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(
+            status_code=400,
+            detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported"
+        )
+
+    # Check file size
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    if file_size > settings.api_upload_max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
+        )
+
+    temp_file_path = None
+
+    try:
+        # Save to temp file
+        suffix = Path(file.filename).suffix
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = Path(temp_file.name)
+
+        logger.info("temp_file_created", path=str(temp_file_path))
+
+        # Extract budget data
+        from backend.agents.budget_extractor import BudgetExtractor
+        extractor = BudgetExtractor()
+        budget_data = extractor.extract_and_validate(temp_file_path)
+
+        # Build Budget and BudgetLine models
+        from backend.core.models import Budget, BudgetLine
+
+        budget = Budget(
+            id=budget_data["budget_id"] if "budget_id" in budget_data else budget_data["project_id"] + "-BUD-001",
+            project_id=budget_data["project_id"],
+            project_name=budget_data["project_name"],
+            total_allocated=budget_data["metadata"]["total_allocated"],
+            total_spent=budget_data["metadata"]["total_spent"],
+            total_remaining=budget_data["metadata"]["total_allocated"] - budget_data["metadata"]["total_spent"],
+            line_count=budget_data["metadata"]["line_count"],
+            extracted_at=datetime.fromisoformat(budget_data["metadata"]["extracted_at"]),
+            validation_warnings=budget_data["metadata"]["validation_warnings"],
+        )
+
+        budget_lines = [
+            BudgetLine(**line_data) for line_data in budget_data["budget_lines"]
+        ]
+
+        # Insert into Neo4j
+        budget_id = graph_builder.insert_budget(budget, budget_lines)
+
+        processing_time = time.time() - start_time
+
+        logger.info(
+            "budget_upload_complete",
+            budget_id=budget_id,
+            processing_time=processing_time,
+        )
+
+        return BudgetUploadResponse(
+            success=True,
+            message=f"Budget for {budget.project_name} processed successfully",
+            budget_id=budget.id,
+            project_id=budget.project_id,
+            project_name=budget.project_name,
+            total_allocated=float(budget.total_allocated),
+            total_spent=float(budget.total_spent),
+            total_remaining=float(budget.total_remaining),
+            line_count=budget.line_count,
+            validation_warnings=budget.validation_warnings,
+            processing_time_seconds=round(processing_time, 2),
+        )
+
+    except Exception as e:
+        logger.error("budget_upload_failed", error=str(e), filename=file.filename)
+
+        return BudgetUploadResponse(
+            success=False,
+            message=f"Failed to process budget: {str(e)}",
+            processing_time_seconds=round(time.time() - start_time, 2),
+        )
+
+    finally:
+        if temp_file_path and temp_file_path.exists():
+            temp_file_path.unlink()
+            logger.debug("temp_file_deleted", path=str(temp_file_path))
+
+
+@router.get("/budgets/{budget_id}", response_model=BudgetDetailResponse)
+async def get_budget(budget_id: str):
+    """
+    Get budget details by ID.
+
+    Args:
+        budget_id: Budget ID
+
+    Returns:
+        Budget details with all budget lines
+    """
+    logger.info("budget_detail_requested", budget_id=budget_id)
+
+    try:
+        budget_data = graph_builder.get_budget_by_id(budget_id)
+
+        if not budget_data:
+            raise HTTPException(status_code=404, detail="Budget not found")
+
+        # Convert budget lines to response format
+        from backend.api.schemas import BudgetLineResponse
+
+        budget_lines = [
+            BudgetLineResponse(
+                id=line["id"],
+                cost_code=line["cost_code"],
+                description=line["description"],
+                allocated=line["allocated"],
+                spent=line["spent"],
+                remaining=line["remaining"],
+                variance_percent=(
+                    ((line["spent"] - line["allocated"]) / line["allocated"] * 100)
+                    if line["allocated"] > 0 else 0
+                ),
+            )
+            for line in budget_data["budget_lines"]
+        ]
+
+        return BudgetDetailResponse(
+            id=budget_data["id"],
+            project_id=budget_data["project_id"],
+            project_name=budget_data["project_name"],
+            total_allocated=budget_data["total_allocated"],
+            total_spent=budget_data["total_spent"],
+            total_remaining=budget_data["total_remaining"],
+            line_count=budget_data["line_count"],
+            status=budget_data["status"],
+            budget_lines=budget_lines,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("budget_detail_failed", budget_id=budget_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve budget: {e}")
+
+
+@router.get("/budgets/project/{project_id}")
+async def get_project_budgets(project_id: str):
+    """
+    Get all budgets for a project.
+
+    Args:
+        project_id: Project ID
+
+    Returns:
+        List of budgets for the project
+    """
+    logger.info("project_budgets_requested", project_id=project_id)
+
+    try:
+        budgets = graph_builder.get_budgets_by_project(project_id)
+
+        return {
+            "project_id": project_id,
+            "budget_count": len(budgets),
+            "budgets": budgets,
+        }
+
+    except Exception as e:
+        logger.error("project_budgets_failed", project_id=project_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve budgets: {e}")
+
+
+@router.get("/budgets/{budget_id}/variance", response_model=BudgetVarianceResponse)
+async def get_budget_variance(budget_id: str):
+    """
+    Calculate budget variance (budget vs actual spend).
+
+    Args:
+        budget_id: Budget ID
+
+    Returns:
+        Variance analysis with per-line breakdown
+    """
+    logger.info("budget_variance_requested", budget_id=budget_id)
+
+    try:
+        budget_data = graph_builder.get_budget_by_id(budget_id)
+
+        if not budget_data:
+            raise HTTPException(status_code=404, detail="Budget not found")
+
+        # Calculate overall variance
+        total_allocated = budget_data["total_allocated"]
+        total_spent = budget_data["total_spent"]
+        overall_variance = (
+            ((total_spent - total_allocated) / total_allocated * 100)
+            if total_allocated > 0 else 0
+        )
+        overall_variance_amount = total_spent - total_allocated
+
+        # Calculate per-line variance
+        line_variances = []
+        overrun_lines = []
+        underrun_lines = []
+        at_risk_lines = []
+
+        for line in budget_data["budget_lines"]:
+            allocated = line["allocated"]
+            spent = line["spent"]
+            variance_pct = ((spent - allocated) / allocated * 100) if allocated > 0 else 0
+            variance_amt = spent - allocated
+            utilization_pct = (spent / allocated * 100) if allocated > 0 else 0
+
+            line_variances.append({
+                "cost_code": line["cost_code"],
+                "description": line["description"],
+                "allocated": allocated,
+                "spent": spent,
+                "variance_percent": round(variance_pct, 2),
+                "variance_amount": round(variance_amt, 2),
+                "utilization_percent": round(utilization_pct, 2),
+            })
+
+            # Categorize lines
+            if variance_amt > 0:
+                overrun_lines.append(line["cost_code"])
+            elif variance_amt < 0:
+                underrun_lines.append(line["cost_code"])
+
+            if utilization_pct > 90:
+                at_risk_lines.append(line["cost_code"])
+
+        return BudgetVarianceResponse(
+            budget_id=budget_id,
+            project_id=budget_data["project_id"],
+            project_name=budget_data["project_name"],
+            overall_variance=round(overall_variance, 2),
+            overall_variance_amount=round(overall_variance_amount, 2),
+            line_variances=line_variances,
+            overrun_lines=overrun_lines,
+            underrun_lines=underrun_lines,
+            at_risk_lines=at_risk_lines,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("budget_variance_failed", budget_id=budget_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to calculate variance: {e}")
 
 
 @router.post("/graph/query")

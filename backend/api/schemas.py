@@ -138,3 +138,59 @@ class ContractDetailResponse(BaseModel):
     unit_price_schedule: Dict[str, float] = {}
     approved_cost_codes: List[str] = []
     extraction_confidence: Optional[float] = None
+
+
+class BudgetLineResponse(BaseModel):
+    """Response for a single budget line."""
+
+    id: str
+    cost_code: str
+    description: str
+    allocated: float
+    spent: float
+    remaining: float
+    variance_percent: Optional[float] = None  # (spent - allocated) / allocated * 100
+
+
+class BudgetUploadResponse(BaseModel):
+    """Response for budget upload endpoint."""
+
+    success: bool
+    message: str
+    budget_id: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    total_allocated: Optional[float] = None
+    total_spent: Optional[float] = None
+    total_remaining: Optional[float] = None
+    line_count: Optional[int] = None
+    validation_warnings: List[str] = []
+    processing_time_seconds: Optional[float] = None
+
+
+class BudgetDetailResponse(BaseModel):
+    """Response for budget detail endpoint."""
+
+    id: str
+    project_id: str
+    project_name: Optional[str] = None
+    total_allocated: float
+    total_spent: float
+    total_remaining: float
+    line_count: int
+    status: str
+    budget_lines: List[BudgetLineResponse] = []
+
+
+class BudgetVarianceResponse(BaseModel):
+    """Response for budget variance analysis."""
+
+    budget_id: str
+    project_id: str
+    project_name: Optional[str] = None
+    overall_variance: float  # Total variance as percentage
+    overall_variance_amount: float  # Dollar amount
+    line_variances: List[Dict[str, Any]] = []  # Per cost code variance
+    overrun_lines: List[str] = []  # Cost codes with overruns
+    underrun_lines: List[str] = []  # Cost codes under budget
+    at_risk_lines: List[str] = []  # Cost codes >90% spent

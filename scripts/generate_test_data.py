@@ -12,6 +12,7 @@ from reportlab.lib.units import inch
 import random
 from datetime import datetime, timedelta
 import json
+import pandas as pd
 
 fake = Faker()
 
@@ -360,6 +361,54 @@ def generate_budgets(budgets_dir: Path):
         print(f"Generated: {path.name} ({len(lines)} budget lines)")
 
 
+def generate_budget_excel_files(budgets_dir: Path):
+    """Generate Excel budget files for upload testing."""
+    for project_id, lines in BUDGETS.items():
+        # Find project name
+        project_name = "Unknown Project"
+        for proj in PROJECTS:
+            if proj["id"] == project_id:
+                project_name = proj["name"]
+                break
+
+        # Create DataFrame from budget lines
+        # Include project info in first row as a comment/header
+        budget_data = []
+        for line in lines:
+            budget_data.append({
+                "Cost Code": line["cost_code"],
+                "Description": line["description"],
+                "Budget": line["allocated"],
+                "Spent": line["spent"],
+                "Remaining": line["remaining"],
+            })
+
+        df = pd.DataFrame(budget_data)
+
+        # Generate Excel file
+        excel_path = budgets_dir / f"{project_id}_Budget.xlsx"
+
+        # Simple approach: just write the budget table
+        # Include project name in the filename and optionally in a metadata sheet
+        with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+            # Write budget data to main sheet
+            df.to_excel(writer, sheet_name="Budget", index=False)
+
+            # Optionally write project metadata to a separate sheet
+            metadata_df = pd.DataFrame({
+                "Field": ["Project ID", "Project Name"],
+                "Value": [project_id, project_name],
+            })
+            metadata_df.to_excel(writer, sheet_name="Metadata", index=False)
+
+        print(f"Generated Excel: {excel_path.name} ({len(budget_data)} lines)")
+
+        # Also generate CSV version for testing
+        csv_path = budgets_dir / f"{project_id}_Budget.csv"
+        df.to_csv(csv_path, index=False)
+        print(f"Generated CSV: {csv_path.name}")
+
+
 def main():
     fixtures_dir = Path(__file__).parent.parent / "backend/tests/fixtures"
     invoices_dir = fixtures_dir / "invoices"
@@ -435,6 +484,7 @@ def main():
     generate_contractors(fixtures_dir)
     generate_contracts(contracts_dir)
     generate_budgets(budgets_dir)
+    generate_budget_excel_files(budgets_dir)
 
     # Generate contract PDFs
     for contract in CONTRACTS:

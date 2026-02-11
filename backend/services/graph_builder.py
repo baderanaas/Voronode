@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import structlog
 
 from backend.core.models import Invoice, LineItem, Contract
@@ -504,3 +504,254 @@ class GraphBuilder:
         }
 
         return invoice_data
+
+    def insert_budget(self, budget: "Budget", budget_lines: List["BudgetLine"]) -> str:
+        """
+        Insert budget and budget lines into Neo4j.
+
+        Pipeline:
+        1. Ensure project exists
+        2. Create Budget node (idempotent MERGE)
+        3. Create BudgetLine nodes
+        4. Create relationships
+
+        Args:
+            budget: Budget model
+            budget_lines: List of BudgetLine models
+
+        Returns:
+            Budget ID
+        """
+        from backend.core.models import Budget, BudgetLine
+
+        logger.info(
+            "starting_budget_insertion",
+            budget_id=budget.id,
+            project_id=budget.project_id,
+            line_count=len(budget_lines),
+        )
+
+        try:
+            # Step 1: Ensure project exists
+            project_id = self._ensure_project(budget.project_id, budget.project_name)
+            logger.info("project_resolved", project_id=project_id)
+
+            # Step 2: Create Budget node
+            budget_query = """
+            MERGE (b:Budget {id: $id})
+            ON CREATE SET b.budget_id = $budget_id,
+                          b.project_id = $project_id,
+                          b.project_name = $project_name,
+                          b.total_allocated = $total_allocated,
+                          b.total_spent = $total_spent,
+                          b.total_remaining = $total_remaining,
+                          b.line_count = $line_count,
+                          b.extracted_at = datetime($extracted_at),
+                          b.validation_warnings = $validation_warnings,
+                          b.status = $status,
+                          b.created_at = datetime()
+            ON MATCH SET b.project_name = $project_name,
+                         b.total_allocated = $total_allocated,
+                         b.total_spent = $total_spent,
+                         b.total_remaining = $total_remaining,
+                         b.line_count = $line_count,
+                         b.extracted_at = datetime($extracted_at),
+                         b.validation_warnings = $validation_warnings,
+                         b.status = $status,
+                         b.updated_at = datetime()
+
+            WITH b
+            MATCH (p:Project {id: $resolved_project_id})
+            MERGE (p)-[:HAS_BUDGET]->(b)
+
+            RETURN b.id as budget_id
+            """
+
+            budget_params = {
+                "id": budget.id,
+                "budget_id": budget.id,
+                "project_id": budget.project_id,
+                "project_name": budget.project_name,
+                "total_allocated": float(budget.total_allocated),
+                "total_spent": float(budget.total_spent),
+                "total_remaining": float(budget.total_remaining),
+                "line_count": budget.line_count,
+                "extracted_at": budget.extracted_at.isoformat() if budget.extracted_at else None,
+                "validation_warnings": budget.validation_warnings,
+                "status": budget.status,
+                "resolved_project_id": project_id,
+            }
+
+            result = self.neo4j_client.run_query(budget_query, budget_params)
+
+            if not result:
+                raise ValueError("Failed to create budget node")
+
+            # Step 3: Insert budget lines
+            for line in budget_lines:
+                self._insert_budget_line(line, budget.id, project_id)
+
+            logger.info(
+                "budget_insertion_complete",
+                budget_id=budget.id,
+                lines_inserted=len(budget_lines),
+            )
+
+            return budget.id
+
+        except Exception as e:
+            logger.error(
+                "budget_insertion_failed",
+                budget_id=budget.id,
+                error=str(e),
+            )
+            raise ValueError(f"Failed to insert budget into graph: {e}")
+
+    def _insert_budget_line(self, line: "BudgetLine", budget_id: str, project_id: str):
+        """Insert a single budget line into Neo4j."""
+        query = """
+        MERGE (bl:BudgetLine {id: $id})
+        ON CREATE SET bl.budget_line_id = $budget_line_id,
+                      bl.project_id = $project_id,
+                      bl.cost_code = $cost_code,
+                      bl.description = $description,
+                      bl.allocated = $allocated,
+                      bl.spent = $spent,
+                      bl.remaining = $remaining,
+                      bl.created_at = datetime()
+        ON MATCH SET bl.allocated = $allocated,
+                     bl.spent = $spent,
+                     bl.remaining = $remaining,
+                     bl.updated_at = datetime()
+
+        WITH bl
+        MATCH (b:Budget {id: $budget_id})
+        MERGE (b)-[:HAS_LINE]->(bl)
+
+        WITH bl
+        MATCH (p:Project {id: $project_id})
+        MERGE (p)-[:HAS_BUDGET_LINE]->(bl)
+
+        RETURN bl.id as line_id
+        """
+
+        params = {
+            "id": line.id,
+            "budget_line_id": line.id,
+            "budget_id": budget_id,
+            "project_id": project_id,
+            "cost_code": line.cost_code,
+            "description": line.description,
+            "allocated": float(line.allocated),
+            "spent": float(line.spent),
+            "remaining": float(line.remaining),
+        }
+
+        self.neo4j_client.run_query(query, params)
+
+        logger.debug(
+            "budget_line_inserted",
+            line_id=line.id,
+            cost_code=line.cost_code,
+        )
+
+    def get_budget_by_id(self, budget_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve budget with all budget lines from Neo4j.
+
+        Args:
+            budget_id: Budget ID
+
+        Returns:
+            Budget data dict with budget_lines array, or None if not found
+        """
+        query = """
+        MATCH (b:Budget {id: $budget_id})
+        OPTIONAL MATCH (p:Project)-[:HAS_BUDGET]->(b)
+        OPTIONAL MATCH (b)-[:HAS_LINE]->(bl:BudgetLine)
+        RETURN b,
+               p.name as project_name,
+               collect(bl) as budget_lines
+        """
+
+        result = self.neo4j_client.run_query(query, {"budget_id": budget_id})
+
+        if not result:
+            return None
+
+        record = result[0]
+        budget_node = record["b"]
+        budget_lines = record["budget_lines"]
+
+        return {
+            "id": budget_node.get("id"),
+            "project_id": budget_node.get("project_id"),
+            "project_name": record.get("project_name") or budget_node.get("project_name"),
+            "total_allocated": budget_node.get("total_allocated"),
+            "total_spent": budget_node.get("total_spent"),
+            "total_remaining": budget_node.get("total_remaining"),
+            "line_count": budget_node.get("line_count"),
+            "status": budget_node.get("status"),
+            "budget_lines": [
+                {
+                    "id": line.get("id"),
+                    "cost_code": line.get("cost_code"),
+                    "description": line.get("description"),
+                    "allocated": line.get("allocated"),
+                    "spent": line.get("spent"),
+                    "remaining": line.get("remaining"),
+                }
+                for line in budget_lines
+                if line is not None
+            ],
+        }
+
+    def get_budgets_by_project(self, project_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all budgets for a project.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            List of budget data dicts
+        """
+        query = """
+        MATCH (p:Project {id: $project_id})-[:HAS_BUDGET]->(b:Budget)
+        OPTIONAL MATCH (b)-[:HAS_LINE]->(bl:BudgetLine)
+        RETURN b,
+               collect(bl) as budget_lines
+        ORDER BY b.created_at DESC
+        """
+
+        results = self.neo4j_client.run_query(query, {"project_id": project_id})
+
+        budgets = []
+        for record in results:
+            budget_node = record["b"]
+            budget_lines = record["budget_lines"]
+
+            budgets.append({
+                "id": budget_node.get("id"),
+                "project_id": budget_node.get("project_id"),
+                "project_name": budget_node.get("project_name"),
+                "total_allocated": budget_node.get("total_allocated"),
+                "total_spent": budget_node.get("total_spent"),
+                "total_remaining": budget_node.get("total_remaining"),
+                "line_count": budget_node.get("line_count"),
+                "status": budget_node.get("status"),
+                "budget_lines": [
+                    {
+                        "id": line.get("id"),
+                        "cost_code": line.get("cost_code"),
+                        "description": line.get("description"),
+                        "allocated": line.get("allocated"),
+                        "spent": line.get("spent"),
+                        "remaining": line.get("remaining"),
+                    }
+                    for line in budget_lines
+                    if line is not None
+                ],
+            })
+
+        return budgets

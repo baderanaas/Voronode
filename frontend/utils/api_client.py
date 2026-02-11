@@ -168,6 +168,37 @@ class APIClient:
         response = _self._request("GET", f"/api/contracts/{contract_id}")
         return response.json()
 
+    # Budget Data
+    def upload_budget_stream(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+        """Upload budget Excel/CSV for extraction and storage."""
+        # Determine content type based on file extension
+        if filename.endswith(".csv"):
+            content_type = "text/csv"
+        else:
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        files = {"file": (filename, file_content, content_type)}
+        response = self._request("POST", "/api/budgets/upload", files=files)
+        return response.json()
+
+    @st.cache_data(ttl=300)
+    def get_budget(_self, budget_id: str) -> Dict[str, Any]:
+        """Get budget details."""
+        response = _self._request("GET", f"/api/budgets/{budget_id}")
+        return response.json()
+
+    @st.cache_data(ttl=300)
+    def get_project_budgets(_self, project_id: str) -> Dict[str, Any]:
+        """Get all budgets for a project."""
+        response = _self._request("GET", f"/api/budgets/project/{project_id}")
+        return response.json()
+
+    @st.cache_data(ttl=300)
+    def get_budget_variance(_self, budget_id: str) -> Dict[str, Any]:
+        """Get budget variance analysis."""
+        response = _self._request("GET", f"/api/budgets/{budget_id}/variance")
+        return response.json()
+
     # Cache Management
     @staticmethod
     def clear_cache():

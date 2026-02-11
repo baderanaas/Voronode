@@ -366,3 +366,5 @@ chroma_data/
 
 # Test fixtures
 backend/tests/fixtures/
+*.md
+!README.md
