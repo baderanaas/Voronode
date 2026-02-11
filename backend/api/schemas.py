@@ -102,3 +102,39 @@ class WorkflowResumeRequest(BaseModel):
     approved: bool
     corrections: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
+
+
+class ContractUploadResponse(BaseModel):
+    """Response for contract upload endpoint."""
+
+    success: bool
+    message: str
+    contract_id: Optional[str] = None
+    contractor_name: Optional[str] = None
+    project_name: Optional[str] = None
+    value: Optional[Decimal] = None
+    retention_rate: Optional[Decimal] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    approved_cost_codes: List[str] = []
+    unit_price_schedule: Dict[str, float] = {}
+    extraction_warnings: List[str] = []
+    processing_time_seconds: Optional[float] = None
+
+
+class ContractDetailResponse(BaseModel):
+    """Response for contract detail endpoint."""
+
+    id: str
+    contractor_id: Optional[str] = None
+    contractor_name: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    value: Optional[float] = None
+    retention_rate: Optional[float] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    terms: Optional[str] = None
+    unit_price_schedule: Dict[str, float] = {}
+    approved_cost_codes: List[str] = []
+    extraction_confidence: Optional[float] = None

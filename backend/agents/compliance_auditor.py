@@ -8,6 +8,7 @@ Validates invoices against contract terms to detect:
 - Out-of-scope charges
 """
 
+import json
 import structlog
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
@@ -124,7 +125,10 @@ class ContractComplianceAuditor:
 
         # Parse unit price schedule from contract (if available)
         # Format: {"cost_code": max_price, ...}
+        # May come back as JSON string from Neo4j (nested maps not supported)
         unit_price_schedule = contract.get("unit_price_schedule", {})
+        if isinstance(unit_price_schedule, str):
+            unit_price_schedule = json.loads(unit_price_schedule)
         if isinstance(unit_price_schedule, dict):
             unit_price_schedule = {
                 k: Decimal(str(v)) for k, v in unit_price_schedule.items()

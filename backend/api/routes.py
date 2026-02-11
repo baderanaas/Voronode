@@ -18,9 +18,12 @@ from backend.api.schemas import (
     WorkflowStatusResponse,
     QuarantinedWorkflowResponse,
     WorkflowResumeRequest,
+    ContractUploadResponse,
+    ContractDetailResponse,
 )
 from backend.agents.extractor import InvoiceExtractor
 from backend.agents.validator import InvoiceValidator
+from backend.agents.contract_extractor import ContractExtractor
 from backend.services.graph_builder import GraphBuilder
 from backend.services.workflow_manager import WorkflowManager
 from backend.vector.client import ChromaDBClient
@@ -37,6 +40,7 @@ validator = InvoiceValidator()
 graph_builder = GraphBuilder()
 chroma_client = ChromaDBClient()
 workflow_manager = WorkflowManager()  # Phase 3
+contract_extractor = ContractExtractor()
 
 
 @router.post("/invoices/upload", response_model=InvoiceUploadResponse)
@@ -581,6 +585,125 @@ async def get_graph_stats():
     except Exception as e:
         logger.error("graph_stats_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get graph stats: {e}")
+
+
+@router.post("/contracts/upload", response_model=ContractUploadResponse)
+async def upload_contract(file: UploadFile = File(...)):
+    """
+    Upload and process a contract PDF.
+
+    Pipeline:
+    1. Save uploaded file to temp
+    2. Extract with ContractExtractor (pdfplumber + Groq/Llama3)
+    3. Validate extracted terms
+    4. Insert into Neo4j graph
+    5. Return extracted contract data
+    """
+    start_time = time.time()
+
+    logger.info("contract_upload_started", filename=file.filename)
+
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+
+    if file_size > settings.api_upload_max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
+        )
+
+    temp_file_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = Path(temp_file.name)
+
+        logger.info("temp_file_created", path=str(temp_file_path))
+
+        # Extract raw text and structure with LLM
+        raw_text = contract_extractor._extract_text_from_pdf(temp_file_path)
+        contract_data = contract_extractor.structure_contract(raw_text)
+
+        # Validate and collect warnings
+        warnings = contract_extractor.validate_extracted_contract(contract_data)
+
+        # Build Contract model (reuses the structured data)
+        contract = contract_extractor._build_contract_model(contract_data, warnings)
+
+        # Insert into Neo4j
+        contract_id = graph_builder.insert_contract(contract)
+
+        processing_time = time.time() - start_time
+
+        logger.info(
+            "contract_upload_complete",
+            contract_id=contract_id,
+            processing_time=processing_time,
+        )
+
+        return ContractUploadResponse(
+            success=True,
+            message=f"Contract {contract.id} processed successfully",
+            contract_id=contract.id,
+            contractor_name=contract.contractor_name,
+            project_name=contract.project_name,
+            value=contract.value,
+            retention_rate=contract.retention_rate,
+            start_date=contract.start_date,
+            end_date=contract.end_date,
+            approved_cost_codes=contract.approved_cost_codes,
+            unit_price_schedule={k: float(v) for k, v in contract.unit_price_schedule.items()},
+            extraction_warnings=warnings,
+            processing_time_seconds=round(processing_time, 2),
+        )
+
+    except Exception as e:
+        logger.error("contract_upload_failed", error=str(e), filename=file.filename)
+
+        return ContractUploadResponse(
+            success=False,
+            message=f"Failed to process contract: {str(e)}",
+            processing_time_seconds=round(time.time() - start_time, 2),
+        )
+
+    finally:
+        if temp_file_path and temp_file_path.exists():
+            temp_file_path.unlink()
+            logger.debug("temp_file_deleted", path=str(temp_file_path))
+
+
+@router.get("/contracts/{contract_id}", response_model=ContractDetailResponse)
+async def get_contract(contract_id: str):
+    """
+    Get contract details by ID.
+
+    Args:
+        contract_id: Contract ID
+
+    Returns:
+        Contract details
+    """
+    logger.info("contract_detail_requested", contract_id=contract_id)
+
+    try:
+        contract_data = graph_builder.get_contract_by_id(contract_id)
+
+        if not contract_data:
+            raise HTTPException(status_code=404, detail="Contract not found")
+
+        return ContractDetailResponse(**contract_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("contract_detail_failed", contract_id=contract_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve contract: {e}")
 
 
 @router.post("/graph/query")

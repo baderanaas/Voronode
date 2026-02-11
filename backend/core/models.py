@@ -41,12 +41,18 @@ class Invoice(BaseModel):
 class Contract(BaseModel):
     id: str
     contractor_id: str
+    contractor_name: Optional[str] = None
     project_id: str
+    project_name: Optional[str] = None
     value: Decimal
     retention_rate: Decimal = Field(ge=0, le=1)  # e.g., 0.10 for 10%
     start_date: date
     end_date: date
     terms: str
+    unit_price_schedule: Dict[str, Decimal] = Field(default_factory=dict)
+    approved_cost_codes: List[str] = Field(default_factory=list)
+    extracted_at: Optional[datetime] = None
+    extraction_confidence: Optional[float] = None
 
 
 class Project(BaseModel):

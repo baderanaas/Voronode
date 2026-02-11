@@ -188,6 +188,143 @@ BUDGETS = {
 }
 
 
+def generate_contract_pdf(output_path: Path, contract_data: dict):
+    """Create a PDF contract document using ReportLab."""
+    c = canvas.Canvas(str(output_path), pagesize=letter)
+    width, height = letter
+
+    # Find contractor and project names from reference data
+    contractor_name = "Unknown Contractor"
+    for cont in CONTRACTORS:
+        if cont["id"] == contract_data["contractor_id"]:
+            contractor_name = cont["name"]
+            break
+
+    project_name = "Unknown Project"
+    for proj in PROJECTS:
+        if proj["id"] == contract_data["project_id"]:
+            project_name = proj["name"]
+            break
+
+    # Header
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(1 * inch, height - 1 * inch, "CONSTRUCTION CONTRACT")
+
+    c.setFont("Helvetica-Bold", 14)
+    y = height - 1.4 * inch
+    c.drawString(1 * inch, y, f"Contract ID: {contract_data['contract_id']}")
+
+    # Parties
+    y -= 0.5 * inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, y, "PARTIES")
+    c.setFont("Helvetica", 11)
+    y -= 0.3 * inch
+    c.drawString(1 * inch, y, f"Contractor: {contractor_name} ({contract_data['contractor_id']})")
+    y -= 0.25 * inch
+    c.drawString(1 * inch, y, f"Project: {project_name} ({contract_data['project_id']})")
+
+    # Contract Value and Dates
+    y -= 0.4 * inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, y, "CONTRACT DETAILS")
+    c.setFont("Helvetica", 11)
+    y -= 0.3 * inch
+    c.drawString(1 * inch, y, f"Contract Value: ${contract_data['value']:,.2f}")
+    y -= 0.25 * inch
+    c.drawString(1 * inch, y, f"Start Date: {contract_data['start_date']}")
+    y -= 0.25 * inch
+    c.drawString(1 * inch, y, f"End Date: {contract_data['end_date']}")
+
+    # Scope of Work
+    y -= 0.4 * inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, y, "SCOPE OF WORK")
+    c.setFont("Helvetica", 11)
+    y -= 0.3 * inch
+
+    cost_code_names = {
+        "01-100": "Site Preparation",
+        "03-300": "Concrete Work",
+        "05-500": "Structural Steel",
+        "06-100": "Rough Carpentry",
+        "09-900": "Painting",
+        "15-100": "Plumbing",
+        "16-100": "Electrical",
+    }
+
+    c.drawString(1 * inch, y, "Approved Cost Codes:")
+    y -= 0.25 * inch
+    for code in contract_data.get("approved_cost_codes", []):
+        desc = cost_code_names.get(code, "Other")
+        c.drawString(1.3 * inch, y, f"- {code}: {desc}")
+        y -= 0.2 * inch
+
+    # Unit Price Schedule
+    schedule = contract_data.get("unit_price_schedule", {})
+    if schedule:
+        y -= 0.3 * inch
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(1 * inch, y, "UNIT PRICE SCHEDULE")
+        c.setFont("Helvetica-Bold", 10)
+        y -= 0.3 * inch
+        c.drawString(1 * inch, y, "Cost Code")
+        c.drawString(2.5 * inch, y, "Description")
+        c.drawString(5 * inch, y, "Max Unit Price")
+
+        c.setFont("Helvetica", 10)
+        y -= 0.25 * inch
+        for code, price in schedule.items():
+            desc = cost_code_names.get(code, "Other")
+            c.drawString(1 * inch, y, code)
+            c.drawString(2.5 * inch, y, desc)
+            c.drawString(5 * inch, y, f"${price:,.2f}")
+            y -= 0.2 * inch
+
+    # Payment Terms
+    y -= 0.3 * inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, y, "PAYMENT TERMS")
+    c.setFont("Helvetica", 11)
+    y -= 0.3 * inch
+    retention_pct = contract_data["retention_rate"] * 100
+    c.drawString(1 * inch, y, f"Retention Rate: {retention_pct:.0f}%")
+    y -= 0.25 * inch
+    c.drawString(
+        1 * inch, y,
+        f"A retention of {retention_pct:.0f}% shall be withheld from each progress payment"
+    )
+    y -= 0.25 * inch
+    c.drawString(1 * inch, y, "until substantial completion of the work.")
+
+    # General Terms
+    y -= 0.4 * inch
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * inch, y, "GENERAL TERMS")
+    c.setFont("Helvetica", 10)
+    y -= 0.3 * inch
+
+    terms_text = contract_data.get("terms", "")
+    # Wrap long terms text
+    max_chars = 80
+    while terms_text and y > 1 * inch:
+        line = terms_text[:max_chars]
+        if len(terms_text) > max_chars:
+            # Break at last space
+            space_idx = line.rfind(" ")
+            if space_idx > 0:
+                line = terms_text[:space_idx]
+                terms_text = terms_text[space_idx + 1:]
+            else:
+                terms_text = terms_text[max_chars:]
+        else:
+            terms_text = ""
+        c.drawString(1 * inch, y, line)
+        y -= 0.2 * inch
+
+    c.save()
+
+
 def generate_projects(fixtures_dir: Path):
     """Write projects.json fixture."""
     path = fixtures_dir / "projects.json"
@@ -298,6 +435,14 @@ def main():
     generate_contractors(fixtures_dir)
     generate_contracts(contracts_dir)
     generate_budgets(budgets_dir)
+
+    # Generate contract PDFs
+    for contract in CONTRACTS:
+        pdf_path = contracts_dir / f"{contract['contract_id']}.pdf"
+        generate_contract_pdf(pdf_path, contract)
+        print(f"Generated: {pdf_path.name}")
+
+    print(f"\nGenerated {len(CONTRACTS)} contract PDFs in {contracts_dir}")
 
     print(f"\nAll fixtures generated in {fixtures_dir}")
 

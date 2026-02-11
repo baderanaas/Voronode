@@ -156,6 +156,12 @@ class APIClient:
         return response.json()
 
     # Contract Data
+    def upload_contract_stream(self, file_content: bytes, filename: str) -> Dict[str, Any]:
+        """Upload contract PDF for extraction and storage."""
+        files = {"file": (filename, file_content, "application/pdf")}
+        response = self._request("POST", "/api/contracts/upload", files=files)
+        return response.json()
+
     @st.cache_data(ttl=300)
     def get_contract(_self, contract_id: str) -> Dict[str, Any]:
         """Get contract details."""
