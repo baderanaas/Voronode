@@ -1,0 +1,30 @@
+{% include "common/system_context.j2" %}
+
+---
+
+Analyze this user query and decide how to handle it.
+
+User Query: "{{ user_message }}"
+{% if history %}
+Conversation History: {{ history[-5:] }}
+{% endif %}
+
+Available Routes:
+1. "generic_response" - For greetings, help requests, small talk, OR out-of-scope queries
+2. "execution_plan" - For data queries requiring tools
+3. "clarification" - When query is ambiguous
+
+{% if execution_modes %}
+Execution Modes:
+- **one_way**: Simple queries, no step dependencies
+- **react**: Complex queries requiring dynamic planning
+{% endif %}
+
+Respond in JSON:
+{
+    "route": "<route_type>",
+    "execution_mode": "one_way" | "react",
+    "reasoning": "<why this route and mode>",
+    "response": "<text if generic_response or clarification>",
+    "plan": {...}
+}

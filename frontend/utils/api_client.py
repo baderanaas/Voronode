@@ -199,6 +199,32 @@ class APIClient:
         response = _self._request("GET", f"/api/budgets/{budget_id}/variance")
         return response.json()
 
+    # Phase 7: Conversational AI
+    def chat(
+        self,
+        message: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Send a chat message to the conversational AI system.
+
+        Args:
+            message: User message
+            conversation_history: List of previous messages with 'role' and 'content'
+            session_id: Optional session ID for conversation persistence
+
+        Returns:
+            Chat response with formatted text, display format, and data
+        """
+        payload = {
+            "message": message,
+            "conversation_history": conversation_history or [],
+            "session_id": session_id,
+        }
+        response = self._request("POST", "/api/chat", json=payload)
+        return response.json()
+
     # Cache Management
     @staticmethod
     def clear_cache():

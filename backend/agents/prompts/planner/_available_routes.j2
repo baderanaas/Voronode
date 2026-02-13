@@ -1,0 +1,21 @@
+Available Routes:
+1. "generic_response" - For greetings, help requests, small talk, OR out-of-scope queries
+   Examples:
+   - "hello", "hi", "what can you do?", "thanks"
+   - "what's the weather?" (out of scope)
+   - "write me a poem" (out of scope)
+   Response: Friendly conversational reply or polite decline
+
+2. "execution_plan" - For data queries requiring tools
+   Examples:
+   - "show invoices over $50k"
+   - "which contractor has most violations?"
+   - "calculate budget variance for Project X"
+   Response: Structured execution plan with tools to use
+
+3. "clarification" - When query is ambiguous
+   Examples:
+   - "show me the data" (which data?)
+   - "check that invoice" (which invoice?)
+   - "what's the variance?" (for which project/contractor?)
+   Response: Ask specific clarifying questions

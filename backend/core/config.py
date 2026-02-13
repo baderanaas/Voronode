@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_embedding_model: str = "text-embedding-3-small"
 
+    # Multi-Agent Chat (Phase 7)
+    openai_chat_model: str = "gpt-4o-mini"  # For conversational agents
+
+    # Web Search (Phase 7)
+    tavily_api_key: Optional[str] = None  # Optional for WebSearchTool
+
     # Neo4j
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

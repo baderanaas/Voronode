@@ -24,6 +24,8 @@ from backend.api.schemas import (
     BudgetDetailResponse,
     BudgetVarianceResponse,
     BudgetLineResponse,
+    ChatRequest,
+    ChatResponse,
 )
 from backend.agents.extractor import InvoiceExtractor
 from backend.agents.validator import InvoiceValidator
@@ -1017,3 +1019,99 @@ async def query_graph(query: dict):
     except Exception as e:
         logger.error("graph_query_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Query execution failed: {e}")
+
+
+# Phase 7: Conversational AI Chat Endpoint
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """
+    Conversational AI endpoint using multi-agent system.
+
+    Pipeline:
+    1. Planner analyzes query and routes (generic_response, execution_plan, clarification)
+    2. If execution_plan, Executor runs tools in one_way or react mode
+    3. Validator checks response quality (retry loop if needed)
+    4. Responder formats response with markdown
+
+    Args:
+        request: User message and conversation history
+
+    Returns:
+        Formatted response with display format and data
+    """
+    start_time = time.time()
+
+    logger.info("chat_request_received", message=request.message[:100])
+
+    try:
+        # Import orchestrator
+        from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+
+        # Initialize multi-agent graph
+        graph = create_multi_agent_graph()
+
+        # Convert conversation history to state format
+        history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.conversation_history
+        ]
+
+        # Create initial state
+        initial_state = {
+            "user_query": request.message,
+            "conversation_history": history,
+            "retry_count": 0,
+            "current_step": 0,
+            "completed_steps": [],
+            "react_max_steps": 5,
+        }
+
+        # Execute graph
+        config = {"configurable": {"thread_id": request.session_id or "default"}}
+        final_state = graph.invoke(initial_state, config)
+
+        # Extract response
+        response_text = final_state.get("final_response", "")
+        display_format = final_state.get("display_format", "text")
+        display_data = final_state.get("display_data")
+        route = final_state.get("route", "unknown")
+        execution_mode = final_state.get("execution_mode")
+
+        # Build metadata
+        metadata = {
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            "retry_count": final_state.get("retry_count", 0),
+            "react_steps": len(final_state.get("completed_steps", [])),
+        }
+
+        logger.info(
+            "chat_request_complete",
+            route=route,
+            execution_mode=execution_mode,
+            processing_time=metadata["processing_time_seconds"],
+        )
+
+        return ChatResponse(
+            response=response_text,
+            display_format=display_format,
+            display_data=display_data,
+            route=route,
+            execution_mode=execution_mode,
+            metadata=metadata,
+            session_id=request.session_id,
+        )
+
+    except Exception as e:
+        logger.error("chat_request_failed", error=str(e), message=request.message[:100])
+
+        # Return friendly error response
+        return ChatResponse(
+            response=f"I encountered an error while processing your request: {str(e)}",
+            display_format="text",
+            display_data=None,
+            route="generic_response",
+            execution_mode=None,
+            metadata={"error": str(e), "processing_time_seconds": round(time.time() - start_time, 2)},
+            session_id=request.session_id,
+        )

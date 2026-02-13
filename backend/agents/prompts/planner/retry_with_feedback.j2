@@ -1,0 +1,54 @@
+{% from "common/macros.j2" import tool_list, execution_modes %}
+{% include "planner/_system_context.j2" %}
+
+RETRY: The previous execution plan failed validation. Create a new approach.
+
+User Query: "{{ user_query }}"
+
+Previous Plan (FAILED):
+{{ previous_plan }}
+
+Validation Issues:
+{{ issues }}
+
+Retry Suggestion:
+{{ retry_suggestion }}
+
+This is retry attempt {{ retry_count + 1 }} of 2.
+
+{% include "planner/_available_routes.j2" %}
+
+{{ execution_modes() }}
+
+{{ tool_list() }}
+
+Create a NEW plan that addresses the issues:
+- Try different tools if previous ones failed
+- Reformulate the query if it was unclear
+- Add clarification steps if needed
+- Break down into smaller steps if too complex
+- If data doesn't exist, suggest asking user for clarification
+
+If you can't fix the issues with different tools/approaches,
+route to "clarification" and ask the user for more information.
+
+Respond in JSON:
+{
+    "route": "execution_plan" | "clarification",
+    "execution_mode": "one_way" | "react",
+    "reasoning": "<what changed and why>",
+    "response": "<text if clarification>",
+    "plan": {
+        "intent": "<what user wants>",
+        "one_way": {
+            "steps": [
+                {"tool": "CypherQueryTool", "action": "Find invoices > $50k"},
+                {"tool": "CalculatorTool", "action": "Sum total amounts"}
+            ]
+        },
+        "react": {
+            "initial_step": {"tool": "CypherQueryTool", "action": "Find most expensive project"},
+            "strategy": "Find project → get contractors → calculate variance → identify highest"
+        }
+    }
+}

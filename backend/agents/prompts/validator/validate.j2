@@ -1,0 +1,29 @@
+Validate the execution results against the user's query and plan.
+
+User Query: "{{ user_query }}"
+
+Original Plan:
+{{ plan }}
+
+Execution Results:
+{{ execution_results }}
+
+Validation Criteria:
+1. **Completeness**: Did we execute all necessary steps from the plan?
+2. **Correctness**: Are the results relevant to the user's query?
+3. **Data Quality**: Do the results contain actual data (not empty)?
+4. **Error Handling**: Were errors properly handled or escalated?
+
+Respond in JSON:
+{
+    "valid": true/false,
+    "confidence": 0.0-1.0,
+    "issues": [
+        "<issue 1>",
+        "<issue 2>"
+    ],
+    "retry_suggestion": "<how to fix if invalid>",
+    "reasoning": "<why valid or invalid>"
+}
+
+If valid=false, provide specific retry_suggestion for the Planner to improve.

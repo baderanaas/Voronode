@@ -1,4 +1,9 @@
-"""Groq LLM client for structured extraction and semantic validation."""
+"""LLM clients for structured extraction and semantic validation.
+
+Supports:
+- GroqClient: Groq API with Llama models (for document extraction)
+- OpenAIClient: OpenAI API with GPT models (for multi-agent system)
+"""
 
 import json
 import time
@@ -6,6 +11,7 @@ from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel, ValidationError
 import structlog
 from groq import Groq
+from openai import OpenAI
 
 from backend.core.config import settings
 
@@ -165,3 +171,104 @@ Return JSON:
                 "confidence": 0.5,
                 "reason": f"Validation error: {str(e)}",
             }
+
+
+class OpenAIClient:
+    """OpenAI API wrapper for multi-agent conversational system."""
+
+    def __init__(self, model: Optional[str] = None):
+        """
+        Initialize OpenAI client.
+
+        Args:
+            model: Model to use (default: gpt-4o-mini from settings)
+        """
+        self.client = OpenAI(api_key=settings.openai_api_key)
+        self.model = model or settings.openai_chat_model
+        self.max_retries = 3
+
+    def extract_json(
+        self,
+        prompt: str,
+        schema: Optional[Type[BaseModel]] = None,
+        temperature: float = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract structured JSON from LLM using JSON mode.
+
+        Args:
+            prompt: The extraction prompt
+            schema: Optional Pydantic model for validation
+            temperature: Temperature for generation (default: 0.7)
+
+        Returns:
+            Parsed JSON dictionary
+
+        Raises:
+            ValueError: If extraction fails after retries
+            ValidationError: If schema validation fails
+        """
+        if temperature is None:
+            temperature = 0.7
+
+        last_error = None
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(
+                    "openai_extraction_attempt",
+                    attempt=attempt + 1,
+                    model=self.model,
+                )
+
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are a helpful AI assistant. Return ONLY valid JSON.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=temperature,
+                    response_format={"type": "json_object"},
+                )
+
+                content = response.choices[0].message.content
+                if not content:
+                    raise ValueError("Empty response from LLM")
+
+                # Parse JSON
+                result = json.loads(content)
+
+                # Validate against schema if provided
+                if schema:
+                    validated = schema(**result)
+                    result = validated.model_dump()
+
+                logger.info(
+                    "openai_extraction_success",
+                    attempt=attempt + 1,
+                    keys=list(result.keys()),
+                )
+                return result
+
+            except (json.JSONDecodeError, ValidationError, ValueError) as e:
+                last_error = e
+                logger.warning(
+                    "openai_extraction_failed",
+                    attempt=attempt + 1,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+
+                # Exponential backoff
+                if attempt < self.max_retries - 1:
+                    sleep_time = 2 ** attempt
+                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    time.sleep(sleep_time)
+
+        # All retries exhausted
+        raise ValueError(
+            f"Failed to extract JSON after {self.max_retries} attempts: {last_error}"
+        )

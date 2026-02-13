@@ -194,3 +194,33 @@ class BudgetVarianceResponse(BaseModel):
     overrun_lines: List[str] = []  # Cost codes with overruns
     underrun_lines: List[str] = []  # Cost codes under budget
     at_risk_lines: List[str] = []  # Cost codes >90% spent
+
+
+# Phase 7: Conversational AI schemas
+
+class ChatMessage(BaseModel):
+    """Single message in conversation history."""
+
+    role: str  # "user" or "assistant"
+    content: str
+    timestamp: Optional[datetime] = None
+
+
+class ChatRequest(BaseModel):
+    """Request for conversational AI chat endpoint."""
+
+    message: str
+    conversation_history: List[ChatMessage] = []
+    session_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    """Response from conversational AI chat endpoint."""
+
+    response: str
+    display_format: str  # "text", "table", or "chart"
+    display_data: Optional[Dict[str, Any]] = None
+    route: str  # "generic_response", "execution_plan", or "clarification"
+    execution_mode: Optional[str] = None  # "one_way" or "react" if execution_plan
+    metadata: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = None

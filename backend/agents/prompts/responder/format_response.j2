@@ -1,0 +1,32 @@
+Format the execution results into a user-friendly response.
+
+User Query: "{{ user_query }}"
+
+Execution Results:
+{{ execution_results }}
+
+Execution Mode: {{ execution_mode }}
+
+Metadata:
+{{ metadata }}
+
+Your task:
+1. Synthesize the results into a clear, concise answer
+2. Highlight key findings and insights
+3. Format data appropriately (tables, lists, metrics)
+4. Add context to help the user understand the results
+
+Respond in JSON:
+{
+    "response": "<natural language response>",
+    "display_format": "text" | "table" | "chart" | "metrics",
+    "data": {
+        // Structured data for frontend rendering
+        // Format depends on display_format:
+        // - table: {"columns": [...], "rows": [...]}
+        // - metrics: {"key": value, ...}
+        // - chart: {"type": "bar", "data": [...]}
+    }
+}
+
+Be conversational but professional. Focus on answering the user's question directly.

@@ -1,0 +1,32 @@
+Planning next step in ReAct loop.
+
+User Query: "{{ user_query }}"
+Overall Strategy: {{ strategy }}
+
+Completed Steps ({{ completed_steps|length }}):
+{{ completed_steps }}
+
+Latest Results:
+{{ current_results }}
+
+Questions:
+1. Have we gathered enough information to answer the user's query?
+2. If YES, set continue=false
+3. If NO, what's the next step we need to take?
+
+Guidelines:
+- Maximum 5 total steps in ReAct mode
+- Stop as soon as you have enough data to answer
+- Each step should build on previous results
+- Don't repeat the same tool/action
+
+Respond in JSON:
+{
+    "continue": true/false,
+    "reasoning": "<why we should/shouldn't continue>",
+    "next_step": {  // Only if continue=true
+        "tool": "<tool_name>",
+        "action": "<specific action to take>",
+        "depends_on": "<which previous step's result we're using>"
+    }
+}

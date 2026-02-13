@@ -1,0 +1,34 @@
+Execute the following plan to answer the user's query.
+
+User Query: "{{ user_query }}"
+
+Execution Plan:
+{{ plan }}
+
+Available Tools:
+- CypherQueryTool: Query Neo4j graph database
+- VectorSearchTool: Semantic search across documents
+- CalculatorTool: Financial calculations
+- GraphExplorerTool: Explore graph relationships
+- ComplianceCheckTool: Validate against contract terms
+- DateTimeTool: Date/time operations
+- WebSearchTool: Search web for information
+- PythonREPLTool: Complex calculations
+
+Execute each step in the plan and return results in JSON:
+{
+    "results": [
+        {
+            "step": 1,
+            "tool": "<tool_name>",
+            "action": "<what was done>",
+            "output": "<tool output>",
+            "status": "success" | "error"
+        }
+    ],
+    "status": "success" | "partial" | "error",
+    "metadata": {
+        "execution_mode": "one_way",
+        "total_steps": <count>
+    }
+}

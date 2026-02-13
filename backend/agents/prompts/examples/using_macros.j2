@@ -1,0 +1,15 @@
+{% from "common/macros.j2" import tool_list, execution_modes, json_response %}
+
+Analyze the user query and create an execution plan.
+
+User Query: "{{ user_query }}"
+
+{{ execution_modes() }}
+
+{{ tool_list() }}
+
+{{ json_response('{
+    "route": "execution_plan",
+    "execution_mode": "one_way" | "react",
+    "plan": {...}
+}') }}

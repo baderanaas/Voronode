@@ -1,0 +1,54 @@
+{# Reusable Jinja2 macros for common prompt patterns #}
+
+{# Macro: Format tool list #}
+{% macro tool_list() %}
+Available Tools:
+- CypherQueryTool: Query Neo4j graph database
+- VectorSearchTool: Semantic search across documents
+- CalculatorTool: Financial calculations (sum, avg, variance, percentiles)
+- GraphExplorerTool: Explore relationships in graph
+- ComplianceCheckTool: Validate against contract terms
+- DateTimeTool: Get current date or calculate relative dates
+- WebSearchTool: Search web for market rates, contractor info
+- PythonREPLTool: Complex calculations and data analysis
+{% endmacro %}
+
+{# Macro: JSON response instruction #}
+{% macro json_response(schema) %}
+Respond in JSON:
+{{ schema }}
+{% endmacro %}
+
+{# Macro: Format step results #}
+{% macro format_steps(steps) %}
+{% for step in steps %}
+Step {{ loop.index }}:
+  Tool: {{ step.tool }}
+  Action: {{ step.action }}
+  {% if step.output %}Output: {{ step.output }}{% endif %}
+  Status: {{ step.status }}
+{% endfor %}
+{% endmacro %}
+
+{# Macro: Validation criteria #}
+{% macro validation_criteria() %}
+Validation Criteria:
+1. **Completeness**: Did we execute all necessary steps from the plan?
+2. **Correctness**: Are the results relevant to the user's query?
+3. **Data Quality**: Do the results contain actual data (not empty)?
+4. **Error Handling**: Were errors properly handled or escalated?
+{% endmacro %}
+
+{# Macro: Execution modes explanation #}
+{% macro execution_modes() %}
+Execution Modes:
+- **one_way**: For simple, straightforward queries
+  - Single tool execution or independent parallel steps
+  - All steps can be planned upfront
+  - Examples: "show all invoices", "total retention"
+
+- **react**: For complex, multi-step queries
+  - Step N depends on result of step N-1
+  - Discovery and exploration queries
+  - Examples: "contractor with highest variance", "overdue invoices for projects over budget"
+{% endmacro %}
