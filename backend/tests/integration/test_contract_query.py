@@ -3,6 +3,12 @@ Test the CONTRACT-001 compliance query with the fixed schema.
 """
 
 import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
@@ -33,7 +39,7 @@ try:
     final_state = graph.invoke(initial_state, config)
 
     print(f"\n📍 Route: {final_state.get('route')}")
-    print(f"⚙️  Execution Mode: {final_state.get('execution_mode')}")
+    print(f"[Mode]  Execution Mode: {final_state.get('execution_mode')}")
     print(f"🔄 Retries: {final_state.get('retry_count', 0)}")
 
     print(f"\n💬 Response:")
@@ -51,9 +57,9 @@ try:
                 print(f"  {i}. {row}")
 
     print("\n" + "=" * 60)
-    print("✅ Test complete!")
+    print("[SUCCESS] Test complete!")
 
 except Exception as e:
-    print(f"\n❌ Error: {e}")
+    print(f"\n[ERROR] Error: {e}")
     import traceback
     traceback.print_exc()

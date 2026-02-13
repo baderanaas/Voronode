@@ -8,6 +8,13 @@ Tests the full LangGraph workflow with all 4 agents:
 - One-way and ReAct execution modes
 """
 
+import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any

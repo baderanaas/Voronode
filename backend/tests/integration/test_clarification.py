@@ -3,6 +3,12 @@ Test clarification vs generic_response routing.
 """
 
 import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
@@ -30,8 +36,8 @@ def test_query(query: str, description: str):
     route = final_state.get('route')
     response = final_state.get('final_response', 'No response')
 
-    print(f"\n📍 Route: {route}")
-    print(f"💬 Response:\n{response}")
+    print(f"\n[Route] Route: {route}")
+    print(f"[Response] Response:\n{response}")
 
     return route, response
 
@@ -54,7 +60,7 @@ def main():
             route, response = test_query(query, description)
             results.append((description, route, response))
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"[ERROR] Error: {e}")
             import traceback
             traceback.print_exc()
 
@@ -72,19 +78,19 @@ def main():
         if "Greeting" in desc or "Out of Scope" in desc:
             expected = "generic_response"
             if route == expected and "AI assistant for financial data analysis" in response:
-                print(f"  ✅ Correct! (hardcoded message)")
+                print(f"  [OK] Correct! (hardcoded message)")
             else:
-                print(f"  ❌ Expected {expected}, got {route}")
+                print(f"  [ERROR] Expected {expected}, got {route}")
 
         elif "Clarification" in desc:
             expected = "clarification"
             if route == expected and "AI assistant for financial data analysis" not in response:
-                print(f"  ✅ Correct! (planner's question)")
+                print(f"  [OK] Correct! (planner's question)")
             else:
-                print(f"  ❌ Expected {expected}, got {route}")
+                print(f"  [ERROR] Expected {expected}, got {route}")
 
     print("\n" + "="*60)
-    print("✅ Testing complete!")
+    print("[OK] Testing complete!")
 
 
 if __name__ == "__main__":

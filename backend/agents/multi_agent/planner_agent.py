@@ -8,7 +8,7 @@ and creates execution plans. Also handles retry logic when validation fails.
 import structlog
 from typing import Dict, Any, List
 
-from backend.services.llm_client import OpenAIClient
+from backend.services.llm_client import GeminiClient
 from backend.agents.prompts.prompt_manager import render_prompt
 
 logger = structlog.get_logger()
@@ -27,8 +27,8 @@ class PlannerAgent:
     """
 
     def __init__(self):
-        """Initialize Planner with OpenAI LLM client (GPT-4o-mini)."""
-        self.llm = OpenAIClient()
+        """Initialize Planner with Gemini LLM client."""
+        self.llm = GeminiClient()
 
     def analyze(self, user_message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
         """

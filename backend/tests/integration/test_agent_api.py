@@ -29,7 +29,7 @@ def test_chat(query: str, session_id: str = "test-session"):
 
         data = response.json()
 
-        print(f"\n✅ Status: {response.status_code}")
+        print(f"\n[SUCCESS] Status: {response.status_code}")
         print(f"💬 Response: {data.get('response', 'No response')}")
         print(f"📊 Format: {data.get('display_format', 'text')}")
 
@@ -42,13 +42,13 @@ def test_chat(query: str, session_id: str = "test-session"):
         return data
 
     except requests.exceptions.ConnectionError:
-        print("❌ Error: Could not connect to API server.")
+        print("[ERROR] Error: Could not connect to API server.")
         print("   Make sure the FastAPI server is running:")
         print("   uvicorn backend.main:app --reload")
     except requests.exceptions.Timeout:
-        print("❌ Error: Request timed out")
+        print("[ERROR] Error: Request timed out")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"[ERROR] Error: {e}")
 
 
 def main():
@@ -68,7 +68,7 @@ def main():
         test_chat(query)
 
     print("\n" + "="*60)
-    print("✅ All tests completed!")
+    print("[SUCCESS] All tests completed!")
 
 
 if __name__ == "__main__":

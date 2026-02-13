@@ -1,5 +1,12 @@
 """Integration tests for invoice extraction pipeline."""
 
+import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 import pytest
 from pathlib import Path
 from decimal import Decimal

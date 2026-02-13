@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Multi-Agent Chat (Phase 7)
     openai_chat_model: str = "gpt-4o-mini"  # For conversational agents
 
+    # Gemini (for Planner agent)
+    gemini_api_key: str
+    gemini_model: str = "gemini-2.5-pro"  # For planner agent
+
     # Web Search (Phase 7)
     tavily_api_key: Optional[str] = None  # Optional for WebSearchTool
 

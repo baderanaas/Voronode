@@ -3,6 +3,12 @@ Test Neo4j date serialization fix.
 """
 
 import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
@@ -31,7 +37,7 @@ try:
     print("\nExecuting query...")
     final_state = graph.invoke(initial_state, config)
 
-    print(f"\n✅ SUCCESS! No serialization error!")
+    print(f"\n[SUCCESS] SUCCESS! No serialization error!")
     print(f"\n📍 Route: {final_state.get('route')}")
     print(f"💬 Response:\n{final_state.get('final_response', '')[:200]}...")
 
@@ -44,10 +50,10 @@ try:
             # Check if date fields are strings now
             for key, value in first_row.items():
                 if 'date' in key.lower():
-                    print(f"  ✅ {key}: {value} (type: {type(value).__name__})")
+                    print(f"  [SUCCESS] {key}: {value} (type: {type(value).__name__})")
 
 except Exception as e:
-    print(f"\n❌ Error: {e}")
+    print(f"\n[ERROR] Error: {e}")
     import traceback
     traceback.print_exc()
 

@@ -5,6 +5,12 @@ Run: python test_complex_queries.py
 """
 
 import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
@@ -101,9 +107,9 @@ def test_query(query_info: dict, graph):
         retries = final_state.get('retry_count', 0)
         response = final_state.get('final_response', '')
 
-        print(f"\n✓ Route: {route}")
-        print(f"✓ Mode: {mode}")
-        print(f"✓ Retries: {retries}")
+        print(f"\n[OK] Route: {route}")
+        print(f"[OK] Mode: {mode}")
+        print(f"[OK] Retries: {retries}")
         print(f"\nResponse:")
         print("-" * 70)
         print(response[:300] + "..." if len(response) > 300 else response)
@@ -111,14 +117,14 @@ def test_query(query_info: dict, graph):
 
         # Validation
         if mode == query_info['expected_mode']:
-            print(f"✅ Mode matches expectation ({mode})")
+            print(f"[SUCCESS] Mode matches expectation ({mode})")
         else:
             print(f"⚠️  Mode mismatch: expected {query_info['expected_mode']}, got {mode}")
 
         return True
 
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\n[ERROR] Error: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -134,7 +140,7 @@ def main():
     # Create graph once
     print("\nInitializing multi-agent graph...")
     graph = create_multi_agent_graph()
-    print("✓ Graph initialized")
+    print("[OK] Graph initialized")
 
     # Run tests
     results = []
@@ -151,7 +157,7 @@ def main():
     total = len(results)
 
     for name, success in results:
-        status = "✅ PASS" if success else "❌ FAIL"
+        status = "[SUCCESS] PASS" if success else "[ERROR] FAIL"
         print(f"{status}: {name}")
 
     print("\n" + "=" * 70)

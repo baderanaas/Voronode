@@ -5,6 +5,12 @@ Run: python test_agent.py
 """
 
 import sys
+import os
+
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+sys.path.insert(0, project_root)
+
 from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
@@ -32,19 +38,19 @@ def test_query(query: str, thread_id: str = "test"):
     final_state = graph.invoke(initial_state, config)
 
     # Print results
-    print(f"\n📍 Route: {final_state.get('route')}")
+    print(f"\n[Route] Route: {final_state.get('route')}")
     if final_state.get('execution_mode'):
-        print(f"⚙️  Mode: {final_state.get('execution_mode')}")
+        print(f"[Mode]  Mode: {final_state.get('execution_mode')}")
     if final_state.get('retry_count', 0) > 0:
-        print(f"🔄 Retries: {final_state.get('retry_count')}")
+        print(f"[Retries] Retries: {final_state.get('retry_count')}")
 
-    print(f"\n💬 Response:")
+    print(f"\n[Response] Response:")
     print(final_state.get('final_response', 'No response'))
 
-    print(f"\n📊 Display Format: {final_state.get('display_format', 'text')}")
+    print(f"\n[Display] Display Format: {final_state.get('display_format', 'text')}")
 
     if final_state.get('display_data'):
-        print(f"📈 Data: {final_state['display_data']}")
+        print(f"[Data] Data: {final_state['display_data']}")
 
     return final_state
 
@@ -72,12 +78,12 @@ def main():
         try:
             test_query(query)
         except Exception as e:
-            print(f"\n❌ Error: {e}")
+            print(f"\n[ERROR] Error: {e}")
             import traceback
             traceback.print_exc()
 
     print("\n" + "="*60)
-    print("✅ Testing complete!")
+    print("[SUCCESS] Testing complete!")
 
 
 if __name__ == "__main__":
