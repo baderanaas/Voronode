@@ -27,7 +27,7 @@ class PlannerAgent:
     """
 
     def __init__(self):
-        """Initialize Planner with Gemini LLM client."""
+        """Initialize Planner with Gemini LLM client (Gemini 2.5 Pro for complex planning)."""
         self.llm = GeminiClient()
 
     def analyze(self, user_message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:

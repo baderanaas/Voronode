@@ -4,11 +4,20 @@ Executor Agent - Tool execution engine.
 Executes tools according to plans from PlannerAgent. Supports two execution modes:
 - one_way: Execute all steps sequentially (for simple queries)
 - react: Execute single step at a time with dynamic planning (for complex queries)
+
+Enhanced with:
+- Circuit breaker pattern for failing tools
+- Timeout handling for long-running tools
+- User-friendly error messages
+- Graceful degradation
 """
 
 import structlog
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+
+from backend.core.circuit_breaker import ToolCircuitBreakerManager, CircuitOpenError
 
 logger = structlog.get_logger()
 
@@ -24,13 +33,27 @@ class ExecutorAgent:
     4. Track execution metadata (time, tools used, success rate)
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        tool_timeout: int = 30,
+        circuit_breaker_threshold: int = 3,
+        circuit_breaker_timeout: int = 60,
+    ):
         """
         Initialize Executor with all available tools.
 
-        Tools will be imported lazily to avoid circular dependencies.
+        Args:
+            tool_timeout: Maximum seconds to wait for tool execution (default: 30)
+            circuit_breaker_threshold: Failures before opening circuit (default: 3)
+            circuit_breaker_timeout: Cooldown period in seconds (default: 60)
         """
         self.tools = {}
+        self.tool_timeout = tool_timeout
+        self.circuit_breaker_manager = ToolCircuitBreakerManager(
+            failure_threshold=circuit_breaker_threshold,
+            timeout=circuit_breaker_timeout,
+        )
+        self._executor = ThreadPoolExecutor(max_workers=5)
         self._initialize_tools()
 
     def _initialize_tools(self):
@@ -113,6 +136,147 @@ class ExecutorAgent:
 
         return PlaceholderTool(tool_name)
 
+    def _execute_tool_with_protection(
+        self,
+        tool_name: str,
+        tool: Any,
+        user_query: str,
+        action: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute tool with circuit breaker and timeout protection.
+
+        Args:
+            tool_name: Name of the tool
+            tool: Tool instance
+            user_query: Original user query
+            action: Action to perform
+            context: Optional context (for ReAct mode)
+
+        Returns:
+            Dict with result or error information
+        """
+        breaker = self.circuit_breaker_manager.get_breaker(tool_name)
+
+        try:
+            # Execute with circuit breaker protection
+            def run_tool():
+                kwargs = {"query": user_query, "action": action}
+                if context:
+                    kwargs["context"] = context
+                return tool.run(**kwargs)
+
+            # Execute with timeout using ThreadPoolExecutor
+            future = self._executor.submit(breaker.call, run_tool)
+            result = future.result(timeout=self.tool_timeout)
+
+            return {
+                "result": result,
+                "status": "success",
+            }
+
+        except CircuitOpenError as e:
+            # Circuit breaker is open - tool has been failing repeatedly
+            logger.warning(
+                "tool_circuit_open",
+                tool=tool_name,
+                error=str(e),
+            )
+            return {
+                "error": self._user_friendly_error(tool_name, "circuit_open"),
+                "error_type": "circuit_open",
+                "status": "failed",
+                "technical_error": str(e),
+            }
+
+        except FutureTimeoutError:
+            # Tool exceeded timeout
+            logger.error(
+                "tool_timeout",
+                tool=tool_name,
+                timeout=self.tool_timeout,
+            )
+            return {
+                "error": self._user_friendly_error(tool_name, "timeout"),
+                "error_type": "timeout",
+                "status": "failed",
+                "technical_error": f"Tool exceeded {self.tool_timeout}s timeout",
+            }
+
+        except Exception as e:
+            # General tool error
+            error_type = type(e).__name__
+            logger.error(
+                "tool_execution_failed",
+                tool=tool_name,
+                error=str(e),
+                error_type=error_type,
+            )
+            return {
+                "error": self._user_friendly_error(tool_name, "general", str(e)),
+                "error_type": "execution_error",
+                "status": "failed",
+                "technical_error": str(e),
+            }
+
+    def _user_friendly_error(
+        self,
+        tool_name: str,
+        error_type: str,
+        technical_msg: str = "",
+    ) -> str:
+        """
+        Convert technical errors to user-friendly messages.
+
+        Args:
+            tool_name: Name of the tool that failed
+            error_type: Type of error (circuit_open, timeout, general)
+            technical_msg: Technical error message
+
+        Returns:
+            User-friendly error message
+        """
+        tool_descriptions = {
+            "CypherQueryTool": "database query",
+            "VectorSearchTool": "document search",
+            "CalculatorTool": "calculation",
+            "GraphExplorerTool": "data exploration",
+            "ComplianceCheckTool": "compliance check",
+            "DateTimeTool": "date/time operation",
+            "WebSearchTool": "web search",
+            "PythonREPLTool": "code execution",
+        }
+
+        tool_desc = tool_descriptions.get(tool_name, "operation")
+
+        if error_type == "circuit_open":
+            return (
+                f"The {tool_desc} service is temporarily unavailable due to repeated errors. "
+                f"Please try again in a minute or rephrase your question to use a different approach."
+            )
+        elif error_type == "timeout":
+            return (
+                f"The {tool_desc} took too long to complete. "
+                f"Try simplifying your query or breaking it into smaller parts."
+            )
+        elif "not found" in technical_msg.lower() or "no results" in technical_msg.lower():
+            return (
+                f"I couldn't find any matching data for your query. "
+                f"Try rephrasing or checking if the data exists in the system."
+            )
+        elif "connection" in technical_msg.lower():
+            return (
+                f"I'm having trouble connecting to the database. "
+                f"Please try again in a moment."
+            )
+        else:
+            # Generic error - still make it friendlier
+            return (
+                f"I encountered an issue while performing the {tool_desc}. "
+                f"Please try rephrasing your question or contact support if this persists."
+            )
+
     def execute_one_way(self, plan: Dict[str, Any], user_query: str) -> Dict[str, Any]:
         """
         Execute all steps sequentially (one-way mode).
@@ -160,30 +324,32 @@ class ExecutorAgent:
                 })
                 continue
 
-            # Execute tool
-            try:
-                result = tool.run(
-                    query=user_query,
-                    action=action,
-                )
-                results.append({
-                    "step": idx + 1,
-                    "tool": tool_name,
-                    "action": action,
-                    "result": result,
-                    "status": "success",
-                })
-                logger.info("executor_step_success", step=idx + 1, tool=tool_name)
+            # Execute tool with protection (circuit breaker + timeout)
+            execution_result = self._execute_tool_with_protection(
+                tool_name=tool_name,
+                tool=tool,
+                user_query=user_query,
+                action=action,
+            )
 
-            except Exception as e:
-                logger.error("executor_step_failed", step=idx + 1, tool=tool_name, error=str(e))
-                results.append({
-                    "step": idx + 1,
-                    "tool": tool_name,
-                    "action": action,
-                    "error": str(e),
-                    "status": "failed",
-                })
+            # Add step metadata
+            step_result = {
+                "step": idx + 1,
+                "tool": tool_name,
+                "action": action,
+                **execution_result,
+            }
+            results.append(step_result)
+
+            if execution_result["status"] == "success":
+                logger.info("executor_step_success", step=idx + 1, tool=tool_name)
+            else:
+                logger.warning(
+                    "executor_step_failed",
+                    step=idx + 1,
+                    tool=tool_name,
+                    error_type=execution_result.get("error_type"),
+                )
 
         execution_time = time.time() - start_time
 
@@ -257,30 +423,29 @@ class ExecutorAgent:
                 "status": "failed",
             }
 
-        # Execute tool with context
-        try:
-            # Pass previous results as context for tools that need it
-            result = tool.run(
-                query=user_query,
-                action=action,
-                context={"previous_results": previous_results},
+        # Execute tool with protection (circuit breaker + timeout)
+        execution_result = self._execute_tool_with_protection(
+            tool_name=tool_name,
+            tool=tool,
+            user_query=user_query,
+            action=action,
+            context={"previous_results": previous_results},
+        )
+
+        # Add tool and action to result
+        result = {
+            "tool": tool_name,
+            "action": action,
+            **execution_result,
+        }
+
+        if execution_result["status"] == "success":
+            logger.info("executor_react_step_success", tool=tool_name)
+        else:
+            logger.warning(
+                "executor_react_step_failed",
+                tool=tool_name,
+                error_type=execution_result.get("error_type"),
             )
 
-            logger.info("executor_react_step_success", tool=tool_name)
-
-            return {
-                "tool": tool_name,
-                "action": action,
-                "result": result,
-                "status": "success",
-            }
-
-        except Exception as e:
-            logger.error("executor_react_step_failed", tool=tool_name, error=str(e))
-
-            return {
-                "tool": tool_name,
-                "action": action,
-                "error": str(e),
-                "status": "failed",
-            }
+        return result

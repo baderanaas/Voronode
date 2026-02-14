@@ -116,7 +116,11 @@ class TestExecuteOneWay:
         assert len(result["results"]) == 1
         assert result["results"][0]["status"] == "failed"
         assert "error" in result["results"][0]
-        assert "Connection error" in result["results"][0]["error"]
+        # Check for user-friendly error message (enhanced behavior)
+        assert "database" in result["results"][0]["error"].lower() or "trouble" in result["results"][0]["error"].lower()
+        # Technical error is stored separately
+        assert "technical_error" in result["results"][0]
+        assert "Connection error" in result["results"][0]["technical_error"]
 
     def test_execute_one_way_unknown_tool(self, executor_agent):
         """Test handling unknown tool gracefully."""
@@ -254,7 +258,11 @@ class TestExecuteReactStep:
 
         # execute_react_step returns a single result dict
         assert result["status"] == "failed"
-        assert "Invalid data" in result["error"]
+        # Check for user-friendly error message (enhanced behavior)
+        assert "calculation" in result["error"].lower() or "issue" in result["error"].lower()
+        # Technical error is stored separately
+        assert "technical_error" in result
+        assert "Invalid data" in result["technical_error"]
 
 
 class TestToolInitialization:

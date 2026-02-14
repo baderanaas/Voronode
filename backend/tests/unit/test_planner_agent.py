@@ -16,12 +16,12 @@ from backend.agents.multi_agent.planner_agent import PlannerAgent
 
 @pytest.fixture
 def planner_agent():
-    """Create PlannerAgent with mocked OpenAIClient."""
-    with patch("backend.agents.multi_agent.planner_agent.OpenAIClient") as mock_openai_cls:
-        mock_openai = Mock()
-        mock_openai_cls.return_value = mock_openai
+    """Create PlannerAgent with mocked GeminiClient."""
+    with patch("backend.agents.multi_agent.planner_agent.GeminiClient") as mock_gemini_cls:
+        mock_gemini = Mock()
+        mock_gemini_cls.return_value = mock_gemini
         agent = PlannerAgent()
-        agent.llm = mock_openai
+        agent.llm = mock_gemini
         yield agent
 
 
