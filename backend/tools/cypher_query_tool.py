@@ -12,7 +12,8 @@ from neo4j.time import Date, DateTime, Time
 from pydantic import BaseModel, Field
 
 from backend.graph.client import Neo4jClient
-from backend.services.llm_client import OpenAIClient
+from backend.services.llm_client import AnthropicClient
+from backend.agents.prompts.prompt_manager import render_prompt
 
 logger = structlog.get_logger()
 
@@ -38,40 +39,10 @@ class CypherQueryTool:
     - Handle graph schema knowledge
     """
 
-    # Graph schema reference for LLM
-    SCHEMA_DESCRIPTION = """
-    Neo4j Graph Schema:
-
-    Nodes:
-    - Invoice (invoice_id, invoice_number, date, due_date, amount, status)
-    - LineItem (line_item_id, description, cost_code, quantity, unit_price, total)
-    - Contract (contract_id, contractor_id, project_id, value, retention_rate, start_date, end_date, approved_cost_codes, unit_price_schedule)
-    - Contractor (contractor_id, name, license_number, rating)
-    - Project (project_id, name, budget, start_date, end_date, status)
-    - Budget (budget_id, project_id, total_allocated, total_spent, total_remaining)
-    - BudgetLine (line_id, cost_code, description, allocated, spent, remaining)
-
-    Relationships:
-    - (Contractor)-[:SUBMITTED]->(Invoice)
-    - (Invoice)-[:FOR_PROJECT]->(Project)
-    - (Invoice)-[:FOR_CONTRACT]->(Contract)
-    - (Invoice)-[:HAS_ITEM]->(LineItem)
-    - (Contract)-[:FOR_PROJECT]->(Project)
-    - (Contract)-[:WITH_CONTRACTOR]->(Contractor)
-    - (Project)-[:HAS_BUDGET]->(Budget)
-    - (Budget)-[:HAS_LINE]->(BudgetLine)
-
-    IMPORTANT:
-    - Use contract_id (not id) for Contract nodes
-    - Use invoice_id or invoice_number for Invoice nodes
-    - Use contractor_id for Contractor nodes
-    - Use project_id for Project nodes
-    """
-
     def __init__(self):
-        """Initialize with Neo4j client and OpenAI LLM (GPT-4o-mini)."""
+        """Initialize with Neo4j client and Anthropic LLM (Claude Haiku 4.5)."""
         self.neo4j_client = Neo4jClient()
-        self.llm = OpenAIClient()
+        self.llm = AnthropicClient()
 
     def run(
         self,
@@ -175,48 +146,17 @@ class CypherQueryTool:
             Cypher query string
         """
         # Build context from previous results if in ReAct mode
-        context_info = ""
+        context_info = None
         if context and context.get("previous_results"):
             context_info = f"\nPrevious Results: {context['previous_results']}"
 
-        prompt = f"""
-        Generate a Cypher query for Neo4j based on this action.
-
-        Action: "{action}"
-        Original User Query: "{original_query}"
-        {context_info}
-
-        {self.SCHEMA_DESCRIPTION}
-
-        Guidelines:
-        1. Return ONLY the Cypher query, no explanation
-        2. Use MATCH patterns appropriate for the schema
-        3. Include WHERE clauses for filtering
-        4. Use WITH for intermediate aggregations, then RETURN at the end
-        5. Add LIMIT if querying many records (default: 100)
-        6. Use proper Cypher syntax (case-sensitive)
-        7. For amounts, use numeric comparisons (e.g., i.amount > 50000)
-        8. For dates, use date() function (e.g., i.date > date('2025-01-01'))
-        9. Use OPTIONAL MATCH for relationships that might not exist
-
-        CRITICAL: Never use RETURN followed by WITH. The correct order is:
-        - MATCH ... WITH ... RETURN ... (correct)
-        - MATCH ... RETURN ... (correct)
-        - MATCH ... RETURN ... WITH ... (WRONG - will cause syntax error)
-
-        Common patterns:
-        - Find invoices: MATCH (i:Invoice) WHERE i.amount > 50000 RETURN i LIMIT 100
-        - Find with contractor: MATCH (c:Contractor)-[:SUBMITTED]->(i:Invoice) WHERE c.contractor_id = 'CONT-001' RETURN i, c
-        - Find with project: MATCH (i:Invoice)-[:FOR_PROJECT]->(p:Project) WHERE p.project_id = 'PRJ-001' RETURN i, p
-        - Aggregations: MATCH (c:Contractor)-[:SUBMITTED]->(i:Invoice)-[:HAS_ITEM]->(li:LineItem) WITH li.cost_code AS costCode, SUM(i.amount) AS total RETURN costCode, total ORDER BY total DESC LIMIT 5
-        - Sort: ORDER BY i.amount DESC
-        - Limit: LIMIT 100
-
-        Return ONLY a JSON object with the Cypher query in this exact format:
-        {{
-            "query": "MATCH (i:Invoice) WHERE i.amount > 50000 RETURN i LIMIT 100"
-        }}
-        """
+        # Render prompt from Jinja2 template
+        prompt = render_prompt(
+            "cypher_tool/generate_query.j2",
+            action=action,
+            original_query=original_query,
+            context_info=context_info,
+        )
 
         try:
             # Get LLM to generate Cypher with Pydantic validation

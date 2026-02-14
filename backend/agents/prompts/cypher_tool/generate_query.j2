@@ -1,0 +1,67 @@
+Generate a Cypher query for Neo4j based on this action.
+
+Action: "{{ action }}"
+Original User Query: "{{ original_query }}"
+{% if context_info %}{{ context_info }}{% endif %}
+
+Neo4j Graph Schema:
+
+Nodes:
+- Invoice (invoice_id, invoice_number, date, due_date, amount, status)
+- LineItem (line_item_id, description, cost_code, quantity, unit_price, total)
+- Contract (contract_id, contractor_id, project_id, value, retention_rate, start_date, end_date, approved_cost_codes, unit_price_schedule)
+- Contractor (contractor_id, name, license_number, rating)
+- Project (project_id, name, budget, start_date, end_date, status)
+- Budget (budget_id, project_id, total_allocated, total_spent, total_remaining)
+- BudgetLine (line_id, cost_code, description, allocated, spent, remaining)
+
+Relationships:
+- (Contractor)-[:SUBMITTED]->(Invoice)
+- (Invoice)-[:FOR_PROJECT]->(Project)
+- (Invoice)-[:FOR_CONTRACT]->(Contract)
+- (Invoice)-[:HAS_ITEM]->(LineItem)
+- (Contract)-[:FOR_PROJECT]->(Project)
+- (Contract)-[:WITH_CONTRACTOR]->(Contractor)
+- (Project)-[:HAS_BUDGET]->(Budget)
+- (Budget)-[:HAS_LINE]->(BudgetLine)
+
+IMPORTANT:
+- Use contract_id (not id) for Contract nodes
+- Use invoice_id or invoice_number for Invoice nodes
+- Use contractor_id for Contractor nodes
+- Use project_id for Project nodes
+
+Guidelines:
+1. Return ONLY the Cypher query, no explanation
+2. Use MATCH patterns appropriate for the schema
+3. Include WHERE clauses for filtering
+4. Use WITH for intermediate aggregations, then RETURN at the end
+5. Add LIMIT if querying many records (default: 100)
+6. Use proper Cypher syntax (case-sensitive)
+7. For amounts, use numeric comparisons (e.g., i.amount > 50000)
+8. For dates, use date() function (e.g., i.date > date('2025-01-01'))
+9. Use OPTIONAL MATCH for relationships that might not exist
+
+CRITICAL CYPHER SYNTAX RULES (NOT SQL):
+- NEVER use GROUP BY - Cypher does NOT support GROUP BY clause
+- Aggregation is IMPLICIT: when you use SUM(), COUNT(), etc., Cypher automatically groups by non-aggregated fields
+- Never use RETURN followed by WITH (correct order: MATCH ... WITH ... RETURN)
+- No HAVING clause - use WHERE after WITH instead
+
+CORRECT Cypher aggregation:
+✓ WITH project, SUM(invoice.amount) AS total RETURN project, total
+✗ WITH project, SUM(invoice.amount) AS total GROUP BY project -- WRONG (no GROUP BY in Cypher)
+
+Common patterns:
+- Find invoices: MATCH (i:Invoice) WHERE i.amount > 50000 RETURN i LIMIT 100
+- Find with contractor: MATCH (c:Contractor)-[:SUBMITTED]->(i:Invoice) WHERE c.contractor_id = 'CONT-001' RETURN i, c
+- Find with project: MATCH (i:Invoice)-[:FOR_PROJECT]->(p:Project) WHERE p.project_id = 'PRJ-001' RETURN i, p
+- Aggregations (NO GROUP BY): MATCH (c:Contractor)-[:SUBMITTED]->(i:Invoice) WITH c.name AS contractor, SUM(i.amount) AS total RETURN contractor, total ORDER BY total DESC LIMIT 5
+- Budget variance: MATCH (p:Project)-[:HAS_BUDGET]->(b:Budget) MATCH (p)<-[:FOR_PROJECT]-(i:Invoice) WITH p.name AS project, b.total_allocated AS budget, SUM(i.amount) AS spent RETURN project, budget, spent, (spent - budget) AS variance LIMIT 100
+- Sort: ORDER BY i.amount DESC
+- Limit: LIMIT 100
+
+Return ONLY a JSON object with the Cypher query in this exact format:
+{
+    "query": "MATCH (i:Invoice) WHERE i.amount > 50000 RETURN i LIMIT 100"
+}

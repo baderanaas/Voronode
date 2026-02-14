@@ -4,6 +4,7 @@ Supports:
 - GroqClient: Groq API with Llama models (for document extraction)
 - OpenAIClient: OpenAI API with GPT models (for multi-agent system)
 - GeminiClient: Google Gemini API (for planner agent)
+- AnthropicClient: Anthropic API with Claude models (for Cypher query generation)
 """
 
 import json
@@ -14,6 +15,7 @@ import structlog
 from groq import Groq
 from openai import OpenAI
 from google import genai
+from anthropic import Anthropic
 
 from backend.core.config import settings
 
@@ -359,6 +361,114 @@ class GeminiClient:
                 last_error = e
                 logger.warning(
                     "gemini_extraction_failed",
+                    attempt=attempt + 1,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+
+                # Exponential backoff
+                if attempt < self.max_retries - 1:
+                    sleep_time = 2 ** attempt
+                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    time.sleep(sleep_time)
+
+        # All retries exhausted
+        raise ValueError(
+            f"Failed to extract JSON after {self.max_retries} attempts: {last_error}"
+        )
+
+
+class AnthropicClient:
+    """Anthropic API wrapper for Cypher query generation and fast structured tasks."""
+
+    def __init__(self, model: Optional[str] = None):
+        """
+        Initialize Anthropic client.
+
+        Args:
+            model: Model to use (default: claude-haiku-4-5-20251001 from settings)
+        """
+        self.client = Anthropic(api_key=settings.anthropic_api_key)
+        self.model = model or settings.anthropic_model
+        self.max_retries = 3
+
+    def extract_json(
+        self,
+        prompt: str,
+        schema: Optional[Type[BaseModel]] = None,
+        temperature: float = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract structured JSON from LLM using JSON mode.
+
+        Args:
+            prompt: The extraction prompt
+            schema: Optional Pydantic model for validation
+            temperature: Temperature for generation (default: 0.1)
+
+        Returns:
+            Parsed JSON dictionary
+
+        Raises:
+            ValueError: If extraction fails after retries
+            ValidationError: If schema validation fails
+        """
+        if temperature is None:
+            temperature = 0.1
+
+        last_error = None
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(
+                    "anthropic_extraction_attempt",
+                    attempt=attempt + 1,
+                    model=self.model,
+                )
+
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    temperature=temperature,
+                    system="You are a helpful AI assistant. Return ONLY valid JSON. Do not include any explanatory text, markdown formatting, or code blocks - just the raw JSON object.",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                )
+
+                content = response.content[0].text if response.content else None
+                if not content:
+                    raise ValueError("Empty response from LLM")
+
+                # Strip markdown code blocks (Claude often wraps JSON in ```json ... ```)
+                content = content.strip()
+                if content.startswith("```"):
+                    # Remove opening ```json or ```
+                    content = content.split("\n", 1)[1] if "\n" in content else content[3:]
+                    # Remove closing ```
+                    if content.endswith("```"):
+                        content = content.rsplit("\n```", 1)[0]
+                content = content.strip()
+
+                # Parse JSON
+                result = json.loads(content)
+
+                # Validate against schema if provided
+                if schema:
+                    validated = schema(**result)
+                    result = validated.model_dump()
+
+                logger.info(
+                    "anthropic_extraction_success",
+                    attempt=attempt + 1,
+                    keys=list(result.keys()),
+                )
+                return result
+
+            except (json.JSONDecodeError, ValidationError, ValueError) as e:
+                last_error = e
+                logger.warning(
+                    "anthropic_extraction_failed",
                     attempt=attempt + 1,
                     error=str(e),
                     error_type=type(e).__name__,

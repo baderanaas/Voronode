@@ -1,6 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
-from decimal import Decimal
 
 
 class Settings(BaseSettings):
@@ -26,6 +25,10 @@ class Settings(BaseSettings):
     # Gemini (for Planner agent)
     gemini_api_key: str
     gemini_model: str = "gemini-2.5-pro"  # For planner agent
+
+    # Anthropic (for Cypher query tool)
+    anthropic_api_key: str
+    anthropic_model: str = "claude-haiku-4-5-20251001"  # For Cypher query generation
 
     # Web Search (Phase 7)
     tavily_api_key: Optional[str] = None  # Optional for WebSearchTool
