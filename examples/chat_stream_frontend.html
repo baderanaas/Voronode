@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voronode Chat Streaming Example</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .chat-area {
+            height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .event-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-type {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .event-time {
+            font-size: 12px;
+            color: #6c757d;
+        }
+
+        .event-data {
+            font-size: 14px;
+            color: #495057;
+            line-height: 1.6;
+        }
+
+        .event-data pre {
+            background: #f1f3f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .input-area {
+            padding: 20px 30px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 10px 30px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            font-size: 13px;
+            color: #6c757d;
+            text-align: center;
+        }
+
+        .status.streaming {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .final-response {
+            background: #e7f3ff;
+            border-left-color: #0066cc;
+            padding: 20px;
+            margin-top: 10px;
+        }
+
+        .final-response .event-type {
+            color: #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 Voronode Chat Streaming</h1>
+            <p>Real-time multi-agent AI chat with Server-Sent Events</p>
+        </div>
+
+        <div class="chat-area" id="chatArea"></div>
+
+        <div class="status" id="status">Ready</div>
+
+        <div class="input-area">
+            <div class="input-group">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Ask a question... (e.g., 'What is the total value of all projects?')"
+                    onkeypress="if(event.key === 'Enter') sendMessage()"
+                >
+                <button id="sendButton" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chatArea');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const statusDiv = document.getElementById('status');
+
+        let isStreaming = false;
+
+        // Example queries for quick testing
+        const exampleQueries = [
+            "What is the total value of all projects?",
+            "Show me the top 3 most expensive invoices",
+            "Calculate the budget variance for project PROJ-001"
+        ];
+
+        function addEvent(event) {
+            const eventDiv = document.createElement('div');
+            eventDiv.className = event.event === 'responder' ? 'event-item final-response' : 'event-item';
+
+            const timestamp = new Date(event.timestamp || Date.now()).toLocaleTimeString();
+
+            let eventContent = '';
+
+            if (event.event === 'planner') {
+                const data = event.data;
+                const plan = data.plan || {};
+
+                eventContent = `
+                    <strong>Route:</strong> ${data.route}<br>
+                    <strong>Execution Mode:</strong> ${data.execution_mode || 'N/A'}<br>
+                    ${data.retry_count > 0 ? `<strong>Retry Count:</strong> ${data.retry_count}<br>` : ''}
+                `;
+
+                // Show plan details
+                if (plan.intent) {
+                    eventContent += `<strong>Intent:</strong> ${plan.intent}<br>`;
+                }
+
+                if (plan.reasoning) {
+                    eventContent += `<strong>Reasoning:</strong> <em>${plan.reasoning}</em><br>`;
+                }
+
+                // Show steps
+                if (plan.one_way && plan.one_way.steps) {
+                    eventContent += `<br><strong>Execution Plan (${plan.one_way.steps.length} steps):</strong>`;
+                    plan.one_way.steps.forEach((step, i) => {
+                        eventContent += `
+                            <div style="margin-left: 15px; margin-top: 8px; padding: 8px; background: #f8f9fa; border-left: 3px solid #667eea; border-radius: 4px;">
+                                <strong>Step ${i + 1}:</strong> ${step.tool}<br>
+                                <span style="color: #666; font-size: 13px;">${step.action}</span>
+                            </div>
+                        `;
+                    });
+                }
+
+            } else if (event.event === 'executor') {
+                const data = event.data;
+                eventContent = `
+                    <strong>Mode:</strong> ${data.mode}<br>
+                    <strong>Status:</strong> ${data.status}<br>
+                `;
+
+                if (data.mode === 'one_way' && data.results) {
+                    eventContent += `<br><strong>Execution Results:</strong>`;
+                    data.results.forEach((result, i) => {
+                        const bgColor = result.status === 'success' ? '#e7f3ff' : '#ffe7e7';
+                        const borderColor = result.status === 'success' ? '#0066cc' : '#cc0000';
+
+                        eventContent += `
+                            <div style="margin-top: 10px; padding: 10px; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px;">
+                                <strong>Step ${i + 1}: ${result.tool}</strong> - ${result.status}<br>
+                                <span style="font-size: 13px; color: #666;">${result.action}</span>
+                        `;
+
+                        if (result.status === 'success' && result.result) {
+                            if (result.result.query) {
+                                eventContent += `
+                                    <div style="margin-top: 8px;">
+                                        <strong>Query:</strong><br>
+                                        <code style="background: #2d2d2d; color: #f8f8f2; padding: 8px; display: block; border-radius: 4px; font-size: 12px; overflow-x: auto;">
+                                            ${result.result.query}
+                                        </code>
+                                    </div>
+                                `;
+                            }
+                            if (result.result.data) {
+                                eventContent += `
+                                    <div style="margin-top: 8px;">
+                                        <strong>Result Data:</strong><br>
+                                        <pre style="background: #f1f3f5; padding: 8px; border-radius: 4px; font-size: 12px; overflow-x: auto; max-height: 200px;">${JSON.stringify(result.result.data, null, 2)}</pre>
+                                    </div>
+                                `;
+                            }
+                        } else if (result.error) {
+                            eventContent += `<div style="margin-top: 5px; color: #cc0000;"><strong>Error:</strong> ${result.error}</div>`;
+                        }
+
+                        eventContent += `</div>`;
+                    });
+
+                    // Show metadata
+                    if (data.metadata && data.metadata.execution_time) {
+                        eventContent += `<div style="margin-top: 10px; color: #666;">
+                            <strong>Execution Time:</strong> ${data.metadata.execution_time.toFixed(2)}s
+                        </div>`;
+                    }
+                } else if (data.step_result) {
+                    const result = data.step_result;
+                    const bgColor = result.status === 'success' ? '#e7f3ff' : '#ffe7e7';
+                    const borderColor = result.status === 'success' ? '#0066cc' : '#cc0000';
+
+                    eventContent += `
+                        <div style="margin-top: 10px; padding: 10px; background: ${bgColor}; border-left: 3px solid ${borderColor}; border-radius: 4px;">
+                            <strong>Step ${data.current_step}:</strong> ${result.tool} - ${result.status}<br>
+                            <span style="font-size: 13px; color: #666;">${result.action || ''}</span>
+                    `;
+
+                    // Show query if available
+                    if (result.status === 'success' && result.result) {
+                        if (result.result.query) {
+                            eventContent += `
+                                <div style="margin-top: 8px;">
+                                    <strong>Query:</strong><br>
+                                    <code style="background: #2d2d2d; color: #f8f8f2; padding: 8px; display: block; border-radius: 4px; font-size: 12px; overflow-x: auto; white-space: pre-wrap;">
+${result.result.query}
+                                    </code>
+                                </div>
+                            `;
+                        }
+                        if (result.result.data) {
+                            eventContent += `
+                                <div style="margin-top: 8px;">
+                                    <strong>Result Data:</strong><br>
+                                    <pre style="background: #f1f3f5; padding: 8px; border-radius: 4px; font-size: 12px; overflow-x: auto; max-height: 200px;">${JSON.stringify(result.result.data, null, 2)}</pre>
+                                </div>
+                            `;
+                        }
+                    } else if (result.error) {
+                        eventContent += `<div style="margin-top: 5px; color: #cc0000;"><strong>Error:</strong> ${result.error}</div>`;
+                    }
+
+                    eventContent += `</div>`;
+                }
+
+            } else if (event.event === 'planner_react') {
+                eventContent = formatPlannerReactEvent(event.data);
+
+            } else if (event.event === 'validator') {
+                const data = event.data;
+                eventContent = `
+                    <strong>Validation Result:</strong> ${data.valid ? '✅ Passed' : '❌ Failed'}<br>
+                `;
+
+                if (!data.valid && data.issues && data.issues.length > 0) {
+                    eventContent += `<br><strong>Issues Found:</strong>`;
+                    data.issues.forEach(issue => {
+                        eventContent += `<div style="margin-left: 15px; margin-top: 5px; color: #cc0000;">• ${issue}</div>`;
+                    });
+
+                    if (data.retry_suggestion) {
+                        eventContent += `<br><strong>Suggestion:</strong> <em>${data.retry_suggestion}</em>`;
+                    }
+                }
+
+            } else if (event.event === 'responder') {
+                const data = event.data;
+                eventContent = `
+                    <strong>Display Format:</strong> ${data.display_format}<br>
+                    <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 8px; border: 2px solid #0066cc; box-shadow: 0 2px 8px rgba(0,102,204,0.15);">
+                        <strong style="color: #0066cc; font-size: 14px;">💬 Final Response:</strong>
+                        <div style="margin-top: 10px; line-height: 1.6; color: #333;">
+                            ${data.response}
+                        </div>
+                    </div>
+                `;
+
+                if (data.display_data) {
+                    eventContent += `
+                        <div style="margin-top: 10px;">
+                            <strong>📊 Structured Data:</strong>
+                            <pre style="background: #f8f9fa; padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; max-height: 300px;">${JSON.stringify(data.display_data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+
+            } else if (event.event === 'complete') {
+                const data = event.data;
+                eventContent = `
+                    <strong>✅ Processing Complete!</strong><br>
+                    <strong>Total Time:</strong> ${data.processing_time_seconds}s<br>
+                    <strong>Message:</strong> ${data.message}
+                `;
+
+            } else if (event.event === 'error') {
+                const data = event.data;
+                eventContent = `
+                    <strong style="color: #cc0000;">❌ Error Occurred</strong><br>
+                    <div style="margin-top: 8px; padding: 10px; background: #ffe7e7; border-radius: 6px;">
+                        <strong>Error:</strong> ${data.error}<br>
+                        <strong>Message:</strong> ${data.message}
+                    </div>
+                `;
+
+            } else {
+                eventContent = `<pre style="background: #f1f3f5; padding: 10px; border-radius: 4px; overflow-x: auto;">${JSON.stringify(event.data, null, 2)}</pre>`;
+            }
+
+            eventDiv.innerHTML = `
+                <div class="event-header">
+                    <span class="event-type">${getEventEmoji(event.event)} ${event.event}</span>
+                    <span class="event-time">${timestamp}</span>
+                </div>
+                <div class="event-data">
+                    ${eventContent}
+                </div>
+            `;
+
+            chatArea.appendChild(eventDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function getEventEmoji(eventType) {
+            const emojis = {
+                'planner': '🧠',
+                'executor': '⚙️',
+                'planner_react': '🔄',
+                'validator': '✅',
+                'responder': '💬',
+                'complete': '🎉',
+                'error': '❌'
+            };
+            return emojis[eventType] || '📌';
+        }
+
+        function formatPlannerReactEvent(data) {
+            let content = `
+                <strong>Decision:</strong> ${data.continue ? '▶️ Continue ReAct Loop' : '⏹️ Stop & Validate'}<br>
+                <strong>Current Step:</strong> ${data.current_step}<br>
+            `;
+
+            // Show what data the planner analyzed
+            if (data.previous_result) {
+                const prev = data.previous_result;
+                content += `
+                    <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-left: 3px solid #6c757d; border-radius: 4px;">
+                        <strong>📊 Analyzing Previous Result:</strong><br>
+                        <span style="font-size: 13px;">Tool: ${prev.tool} - ${prev.status}</span>
+                `;
+
+                if (prev.result && prev.result.data) {
+                    const dataPreview = JSON.stringify(prev.result.data).substring(0, 200);
+                    content += `
+                        <div style="margin-top: 5px;">
+                            <strong>Data Received:</strong>
+                            <pre style="background: #e9ecef; padding: 6px; border-radius: 4px; font-size: 11px; max-height: 150px; overflow-y: auto;">${JSON.stringify(prev.result.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else if (prev.error) {
+                    content += `<div style="margin-top: 5px; color: #dc3545;">Error: ${prev.error}</div>`;
+                } else {
+                    content += `<div style="margin-top: 5px; color: #6c757d;">No data returned</div>`;
+                }
+
+                content += `</div>`;
+            }
+
+            // Show next step decision
+            if (data.continue && data.next_step) {
+                const next = data.next_step;
+                content += `
+                    <div style="margin-top: 10px; padding: 10px; background: #e7f3ff; border-left: 3px solid #0066cc; border-radius: 4px;">
+                        <strong>➡️ Next Step Decision:</strong><br>
+                        <strong>Tool:</strong> ${next.tool}<br>
+                        <strong>Action:</strong> <span style="font-size: 13px;">${next.action}</span>
+                        ${next.reasoning ? `<br><strong>Reasoning:</strong> <em style="font-size: 13px;">${next.reasoning}</em>` : ''}
+                        ${next.depends_on ? `<br><strong>Depends On:</strong> ${next.depends_on}` : ''}
+                    </div>
+                `;
+            }
+
+            return content;
+        }
+
+        function setStatus(message, type = 'normal') {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status';
+            if (type === 'streaming') {
+                statusDiv.className = 'status streaming';
+                statusDiv.innerHTML = `<span class="loader"></span>${message}`;
+            } else if (type === 'error') {
+                statusDiv.className = 'status error';
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+
+            if (!message || isStreaming) return;
+
+            isStreaming = true;
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+
+            // Clear chat area for new query
+            chatArea.innerHTML = '';
+
+            // Add user message
+            const userDiv = document.createElement('div');
+            userDiv.className = 'event-item';
+            userDiv.style.borderLeftColor = '#28a745';
+            userDiv.innerHTML = `
+                <div class="event-header">
+                    <span class="event-type" style="color: #28a745;">👤 USER</span>
+                    <span class="event-time">${new Date().toLocaleTimeString()}</span>
+                </div>
+                <div class="event-data">
+                    <strong>${message}</strong>
+                </div>
+            `;
+            chatArea.appendChild(userDiv);
+
+            setStatus('Streaming response...', 'streaming');
+
+            try {
+                const response = await fetch('http://localhost:8001/api/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_history: [],
+                        session_id: `web-${Date.now()}`
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // Process complete events
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); // Keep incomplete line in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const eventJson = line.substring(6);
+                            try {
+                                const event = JSON.parse(eventJson);
+                                addEvent(event);
+
+                                if (event.event === 'complete') {
+                                    setStatus('✅ Complete');
+                                } else if (event.event === 'error') {
+                                    setStatus('❌ Error occurred', 'error');
+                                }
+                            } catch (e) {
+                                console.error('Failed to parse event:', e);
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error('Stream error:', error);
+                setStatus(`❌ Error: ${error.message}`, 'error');
+                addEvent({
+                    event: 'error',
+                    data: { error: error.message },
+                    timestamp: new Date().toISOString()
+                });
+            } finally {
+                isStreaming = false;
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                messageInput.value = '';
+                messageInput.focus();
+            }
+        }
+
+        // Auto-fill example on page load
+        window.addEventListener('load', () => {
+            messageInput.value = exampleQueries[0];
+            messageInput.focus();
+
+            // Add quick example buttons
+            console.log('Example queries:', exampleQueries);
+        });
+    </script>
+</body>
+</html>

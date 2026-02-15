@@ -4,10 +4,12 @@ import time
 import tempfile
 from pathlib import Path
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 import structlog
+import json
 
 from backend.api.schemas import (
     InvoiceUploadResponse,
@@ -26,6 +28,7 @@ from backend.api.schemas import (
     BudgetLineResponse,
     ChatRequest,
     ChatResponse,
+    ChatStreamEvent,
 )
 from backend.agents.extractor import InvoiceExtractor
 from backend.agents.validator import InvoiceValidator
@@ -128,7 +131,9 @@ async def upload_invoice(file: UploadFile = File(...)):
             Line Items:
             """
             for item in invoice.line_items:
-                invoice_text += f"\n- {item.cost_code}: {item.description} (${item.total})"
+                invoice_text += (
+                    f"\n- {item.cost_code}: {item.description} (${item.total})"
+                )
 
             chroma_client.add_document(
                 collection_name="invoices",
@@ -254,6 +259,7 @@ async def health_check():
 
 # Phase 3: LangGraph Workflow Endpoints
 
+
 @router.post("/invoices/upload-graph", response_model=InvoiceUploadResponse)
 async def upload_invoice_with_workflow(file: UploadFile = File(...)):
     """
@@ -305,9 +311,7 @@ async def upload_invoice_with_workflow(file: UploadFile = File(...)):
         anomaly_dicts = final_state.get("anomalies", [])
 
         # Convert anomalies to response models
-        anomaly_responses = [
-            ValidationAnomalyResponse(**a) for a in anomaly_dicts
-        ]
+        anomaly_responses = [ValidationAnomalyResponse(**a) for a in anomaly_dicts]
 
         # Check if workflow was quarantined
         is_quarantined = final_state.get("status") == "quarantined"
@@ -342,7 +346,9 @@ async def upload_invoice_with_workflow(file: UploadFile = File(...)):
         )
 
     except Exception as e:
-        logger.error("invoice_upload_graph_failed", error=str(e), filename=file.filename)
+        logger.error(
+            "invoice_upload_graph_failed", error=str(e), filename=file.filename
+        )
 
         return InvoiceUploadResponse(
             success=False,
@@ -432,9 +438,7 @@ async def resume_workflow(document_id: str, request: WorkflowResumeRequest):
         extracted_data = final_state.get("extracted_data", {})
         anomaly_dicts = final_state.get("anomalies", [])
 
-        anomaly_responses = [
-            ValidationAnomalyResponse(**a) for a in anomaly_dicts
-        ]
+        anomaly_responses = [ValidationAnomalyResponse(**a) for a in anomaly_dicts]
 
         return InvoiceUploadResponse(
             success=final_state.get("status") == "completed",
@@ -664,7 +668,9 @@ async def upload_contract(file: UploadFile = File(...)):
             start_date=contract.start_date,
             end_date=contract.end_date,
             approved_cost_codes=contract.approved_cost_codes,
-            unit_price_schedule={k: float(v) for k, v in contract.unit_price_schedule.items()},
+            unit_price_schedule={
+                k: float(v) for k, v in contract.unit_price_schedule.items()
+            },
             extraction_warnings=warnings,
             processing_time_seconds=round(processing_time, 2),
         )
@@ -738,7 +744,7 @@ async def upload_budget(file: UploadFile = File(...)):
     if not file.filename.endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(
             status_code=400,
-            detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported"
+            detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported",
         )
 
     # Check file size
@@ -766,6 +772,7 @@ async def upload_budget(file: UploadFile = File(...)):
 
         # Extract budget data
         from backend.agents.budget_extractor import BudgetExtractor
+
         extractor = BudgetExtractor()
         budget_data = extractor.extract_and_validate(temp_file_path)
 
@@ -773,14 +780,21 @@ async def upload_budget(file: UploadFile = File(...)):
         from backend.core.models import Budget, BudgetLine
 
         budget = Budget(
-            id=budget_data["budget_id"] if "budget_id" in budget_data else budget_data["project_id"] + "-BUD-001",
+            id=(
+                budget_data["budget_id"]
+                if "budget_id" in budget_data
+                else budget_data["project_id"] + "-BUD-001"
+            ),
             project_id=budget_data["project_id"],
             project_name=budget_data["project_name"],
             total_allocated=budget_data["metadata"]["total_allocated"],
             total_spent=budget_data["metadata"]["total_spent"],
-            total_remaining=budget_data["metadata"]["total_allocated"] - budget_data["metadata"]["total_spent"],
+            total_remaining=budget_data["metadata"]["total_allocated"]
+            - budget_data["metadata"]["total_spent"],
             line_count=budget_data["metadata"]["line_count"],
-            extracted_at=datetime.fromisoformat(budget_data["metadata"]["extracted_at"]),
+            extracted_at=datetime.fromisoformat(
+                budget_data["metadata"]["extracted_at"]
+            ),
             validation_warnings=budget_data["metadata"]["validation_warnings"],
         )
 
@@ -860,7 +874,8 @@ async def get_budget(budget_id: str):
                 remaining=line["remaining"],
                 variance_percent=(
                     ((line["spent"] - line["allocated"]) / line["allocated"] * 100)
-                    if line["allocated"] > 0 else 0
+                    if line["allocated"] > 0
+                    else 0
                 ),
             )
             for line in budget_data["budget_lines"]
@@ -936,7 +951,8 @@ async def get_budget_variance(budget_id: str):
         total_spent = budget_data["total_spent"]
         overall_variance = (
             ((total_spent - total_allocated) / total_allocated * 100)
-            if total_allocated > 0 else 0
+            if total_allocated > 0
+            else 0
         )
         overall_variance_amount = total_spent - total_allocated
 
@@ -949,19 +965,23 @@ async def get_budget_variance(budget_id: str):
         for line in budget_data["budget_lines"]:
             allocated = line["allocated"]
             spent = line["spent"]
-            variance_pct = ((spent - allocated) / allocated * 100) if allocated > 0 else 0
+            variance_pct = (
+                ((spent - allocated) / allocated * 100) if allocated > 0 else 0
+            )
             variance_amt = spent - allocated
             utilization_pct = (spent / allocated * 100) if allocated > 0 else 0
 
-            line_variances.append({
-                "cost_code": line["cost_code"],
-                "description": line["description"],
-                "allocated": allocated,
-                "spent": spent,
-                "variance_percent": round(variance_pct, 2),
-                "variance_amount": round(variance_amt, 2),
-                "utilization_percent": round(utilization_pct, 2),
-            })
+            line_variances.append(
+                {
+                    "cost_code": line["cost_code"],
+                    "description": line["description"],
+                    "allocated": allocated,
+                    "spent": spent,
+                    "variance_percent": round(variance_pct, 2),
+                    "variance_amount": round(variance_amt, 2),
+                    "utilization_percent": round(utilization_pct, 2),
+                }
+            )
 
             # Categorize lines
             if variance_amt > 0:
@@ -988,7 +1008,9 @@ async def get_budget_variance(budget_id: str):
         raise
     except Exception as e:
         logger.error("budget_variance_failed", budget_id=budget_id, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to calculate variance: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to calculate variance: {e}"
+        )
 
 
 @router.post("/graph/query")
@@ -1022,6 +1044,7 @@ async def query_graph(query: dict):
 
 
 # Phase 7: Conversational AI Chat Endpoint
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -1112,6 +1135,229 @@ async def chat(request: ChatRequest):
             display_data=None,
             route="generic_response",
             execution_mode=None,
-            metadata={"error": str(e), "processing_time_seconds": round(time.time() - start_time, 2)},
+            metadata={
+                "error": str(e),
+                "processing_time_seconds": round(time.time() - start_time, 2),
+            },
             session_id=request.session_id,
         )
+
+
+@router.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """
+    Streaming conversational AI endpoint using multi-agent system.
+
+    Returns Server-Sent Events (SSE) with real-time updates as the multi-agent
+    system processes the query.
+
+    Events:
+    - planner: Planning stage updates (route, execution mode, plan)
+    - executor: Tool execution updates (tool name, status, results)
+    - planner_react: ReAct planning updates (next step decision)
+    - validator: Validation updates (validation result, issues)
+    - responder: Final response formatting
+    - complete: Processing complete with final response
+    - error: Error occurred during processing
+
+    Args:
+        request: User message and conversation history
+
+    Returns:
+        StreamingResponse with Server-Sent Events
+    """
+
+    async def generate_events():
+        """Generate SSE events from multi-agent graph stream."""
+        start_time = time.time()
+
+        logger.info("chat_stream_request_received", message=request.message[:100])
+
+        try:
+            # Import orchestrator
+            from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+
+            # Initialize multi-agent graph
+            graph = create_multi_agent_graph()
+
+            # Convert conversation history to state format
+            history = [
+                {"role": msg.role, "content": msg.content}
+                for msg in request.conversation_history
+            ]
+
+            # Create initial state
+            initial_state = {
+                "user_query": request.message,
+                "conversation_history": history,
+                "retry_count": 0,
+                "current_step": 0,
+                "completed_steps": [],
+                "react_max_steps": 5,
+            }
+
+            # Execute graph with streaming
+            config = {"configurable": {"thread_id": request.session_id or "default"}}
+
+            # Stream state updates
+            for chunk in graph.stream(initial_state, config):
+                # chunk is a dict with node name as key and state update as value
+                # Example: {"planner": {...state updates...}}
+
+                node_name = list(chunk.keys())[0]
+                state_update = chunk[node_name]
+
+                # Create event based on node
+                event_data = _create_event_data(node_name, state_update)
+
+                if event_data:
+                    event = ChatStreamEvent(
+                        event=node_name,
+                        data=event_data,
+                        timestamp=datetime.utcnow(),
+                    )
+
+                    # Yield SSE format: data: {json}\n\n
+                    yield f"data: {event.model_dump_json()}\n\n"
+
+                    logger.debug(
+                        "chat_stream_event_sent",
+                        node=node_name,
+                        session_id=request.session_id,
+                    )
+
+            # Send completion event
+            processing_time = time.time() - start_time
+
+            complete_event = ChatStreamEvent(
+                event="complete",
+                data={
+                    "message": "Processing complete",
+                    "processing_time_seconds": round(processing_time, 2),
+                },
+                timestamp=datetime.utcnow(),
+            )
+
+            yield f"data: {complete_event.model_dump_json()}\n\n"
+
+            logger.info(
+                "chat_stream_complete",
+                processing_time=processing_time,
+                session_id=request.session_id,
+            )
+
+        except Exception as e:
+            logger.error(
+                "chat_stream_failed",
+                error=str(e),
+                message=request.message[:100],
+            )
+
+            # Send error event
+            error_event = ChatStreamEvent(
+                event="error",
+                data={
+                    "error": str(e),
+                    "message": f"I encountered an error while processing your request: {str(e)}",
+                },
+                timestamp=datetime.utcnow(),
+            )
+
+            yield f"data: {error_event.model_dump_json()}\n\n"
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+def _create_event_data(
+    node_name: str, state_update: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """
+    Create event data from state update based on node type.
+
+    Args:
+        node_name: Name of the node that executed (planner, executor, etc.)
+        state_update: State updates from the node
+
+    Returns:
+        Event data dictionary or None if no relevant data
+    """
+    if node_name == "planner":
+        planner_output = state_update.get("planner_output", {})
+        return {
+            "stage": "planning",
+            "route": state_update.get("route"),
+            "execution_mode": state_update.get("execution_mode"),
+            "plan": planner_output.get("plan", {}),
+            "response": planner_output.get("response", ""),
+            "retry_count": state_update.get("retry_count", 0),
+        }
+
+    elif node_name == "executor":
+        execution_results = state_update.get("execution_results", {})
+        execution_mode = state_update.get("execution_mode", "one_way")
+
+        if execution_mode == "one_way":
+            # Return all results for one-way mode
+            return {
+                "stage": "execution",
+                "mode": "one_way",
+                "status": execution_results.get("status"),
+                "results": execution_results.get("results", []),
+                "metadata": execution_results.get("metadata", {}),
+            }
+        else:
+            # Return single step result for react mode
+            completed_steps = state_update.get("completed_steps", [])
+            latest_step = completed_steps[-1] if completed_steps else {}
+
+            # Determine status from latest step
+            step_status = latest_step.get("status", "unknown") if latest_step else "unknown"
+
+            return {
+                "stage": "execution",
+                "mode": "react",
+                "status": step_status,
+                "current_step": state_update.get("current_step", 0),
+                "step_result": latest_step,
+                "total_steps": len(completed_steps),
+            }
+
+    elif node_name == "planner_react":
+        # Get the previous step's results to show what planner is analyzing
+        completed_steps = state_update.get("completed_steps", [])
+        previous_result = completed_steps[-1] if completed_steps else None
+
+        return {
+            "stage": "react_planning",
+            "continue": state_update.get("react_continue", False),
+            "next_step": state_update.get("next_step", {}),
+            "current_step": state_update.get("current_step", 0),
+            "previous_result": previous_result,  # Show what data planner received
+        }
+
+    elif node_name == "validator":
+        validation_result = state_update.get("validation_result", {})
+        return {
+            "stage": "validation",
+            "valid": validation_result.get("valid", False),
+            "issues": validation_result.get("issues", []),
+            "retry_suggestion": validation_result.get("retry_suggestion", ""),
+        }
+
+    elif node_name == "responder":
+        return {
+            "stage": "formatting",
+            "response": state_update.get("final_response", ""),
+            "display_format": state_update.get("display_format", "text"),
+            "display_data": state_update.get("display_data"),
+        }
+
+    return None

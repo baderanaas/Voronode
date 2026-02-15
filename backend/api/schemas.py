@@ -70,6 +70,7 @@ class HealthResponse(BaseModel):
 
 # Phase 3: Workflow-related schemas
 
+
 class WorkflowStatusResponse(BaseModel):
     """Workflow status response."""
 
@@ -198,6 +199,7 @@ class BudgetVarianceResponse(BaseModel):
 
 # Phase 7: Conversational AI schemas
 
+
 class ChatMessage(BaseModel):
     """Single message in conversation history."""
 
@@ -224,3 +226,11 @@ class ChatResponse(BaseModel):
     execution_mode: Optional[str] = None  # "one_way" or "react" if execution_plan
     metadata: Optional[Dict[str, Any]] = None
     session_id: Optional[str] = None
+
+
+class ChatStreamEvent(BaseModel):
+    """Single event in chat stream (Server-Sent Events)."""
+
+    event: str  # "planner", "executor", "validator", "responder", "complete", "error"
+    data: Dict[str, Any]
+    timestamp: Optional[datetime] = None
