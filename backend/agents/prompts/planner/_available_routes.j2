@@ -14,6 +14,19 @@ Available Routes:
    Response: Structured execution plan with tools to use
 
 3. "clarification" - When query is ambiguous
+
+4. "upload_plan" - For document ingestion (files provided with temp paths)
+   Examples:
+   - "User uploaded invoice_march.pdf → /tmp/abc.pdf"
+   - "User uploaded 2 file(s): invoice.pdf → /tmp/tmpABC.pdf, contract.pdf → /tmp/tmpXYZ.pdf"
+   - Any message containing "uploaded ... → /tmp/..." patterns
+   Response: Steps using InvoiceUploadTool / ContractUploadTool / BudgetUploadTool
+   Note: Classify each file by its name/extension:
+   - Files named *invoice* or *inv_* → InvoiceUploadTool
+   - Files named *contract* or *contr_* → ContractUploadTool
+   - Files named *budget* or *.xlsx or *.csv → BudgetUploadTool
+   - If ambiguous PDF → InvoiceUploadTool (default)
+
    Examples:
    - "show me the data" (which data?)
    - "check that invoice" (which invoice?)

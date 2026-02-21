@@ -6,23 +6,18 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 import structlog
 import json
 
 from backend.api.schemas import (
     InvoiceUploadResponse,
-    InvoiceDetailResponse,
     HealthResponse,
     ValidationAnomalyResponse,
-    LineItemResponse,
     WorkflowStatusResponse,
     QuarantinedWorkflowResponse,
     WorkflowResumeRequest,
-    ContractUploadResponse,
-    ContractDetailResponse,
-    BudgetUploadResponse,
     BudgetDetailResponse,
     BudgetVarianceResponse,
     BudgetLineResponse,
@@ -30,9 +25,6 @@ from backend.api.schemas import (
     ChatResponse,
     ChatStreamEvent,
 )
-from backend.agents.extractor import InvoiceExtractor
-from backend.agents.validator import InvoiceValidator
-from backend.agents.contract_extractor import ContractExtractor
 from backend.services.graph_builder import GraphBuilder
 from backend.services.workflow_manager import WorkflowManager
 from backend.vector.client import ChromaDBClient
@@ -44,193 +36,9 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 # Initialize services (lazy loading in production would be better)
-extractor = InvoiceExtractor()
-validator = InvoiceValidator()
 graph_builder = GraphBuilder()
 chroma_client = ChromaDBClient()
-workflow_manager = WorkflowManager()  # Phase 3
-contract_extractor = ContractExtractor()
-
-
-@router.post("/invoices/upload", response_model=InvoiceUploadResponse)
-async def upload_invoice(file: UploadFile = File(...)):
-    """
-    Upload and process an invoice PDF.
-
-    Pipeline:
-    1. Save uploaded file to temp
-    2. Extract with InvoiceExtractor
-    3. Validate with InvoiceValidator
-    4. Insert with GraphBuilder
-    5. Embed text in ChromaDB
-    6. Return JSON response
-    """
-    start_time = time.time()
-
-    logger.info("invoice_upload_started", filename=file.filename)
-
-    # Validate file type
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-
-    # Check file size
-    file.file.seek(0, 2)  # Seek to end
-    file_size = file.file.tell()
-    file.file.seek(0)  # Reset to start
-
-    if file_size > settings.api_upload_max_size:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
-        )
-
-    temp_file_path = None
-
-    try:
-        # Step 1: Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file_path = Path(temp_file.name)
-
-        logger.info("temp_file_created", path=str(temp_file_path))
-
-        # Step 2: Extract invoice
-        invoice = extractor.extract_invoice_from_pdf(temp_file_path)
-
-        # Step 3: Validate invoice
-        anomalies = validator.validate_invoice(invoice)
-
-        # Convert anomalies to response models
-        anomaly_responses = [
-            ValidationAnomalyResponse(**anomaly.to_dict()) for anomaly in anomalies
-        ]
-
-        # Check for blocking anomalies (high severity)
-        high_severity_count = sum(1 for a in anomalies if a.severity == "high")
-
-        if high_severity_count > 0:
-            logger.warning(
-                "invoice_has_high_severity_anomalies",
-                invoice_number=invoice.invoice_number,
-                count=high_severity_count,
-            )
-
-        # Step 4: Insert into Neo4j
-        invoice_id = graph_builder.insert_invoice(invoice)
-
-        # Step 5: Embed in ChromaDB
-        try:
-            # Create searchable text from invoice
-            invoice_text = f"""
-            Invoice: {invoice.invoice_number}
-            Date: {invoice.date}
-            Contractor: {invoice.contractor_id}
-            Amount: ${invoice.amount}
-
-            Line Items:
-            """
-            for item in invoice.line_items:
-                invoice_text += (
-                    f"\n- {item.cost_code}: {item.description} (${item.total})"
-                )
-
-            chroma_client.add_document(
-                collection_name="invoices",
-                doc_id=invoice_id,
-                text=invoice_text,
-                metadata={
-                    "invoice_number": invoice.invoice_number,
-                    "date": str(invoice.date),
-                    "amount": float(invoice.amount),
-                    "contractor_id": invoice.contractor_id,
-                },
-            )
-
-            logger.info("invoice_embedded", invoice_id=invoice_id)
-
-        except Exception as e:
-            # Don't fail the entire upload if embedding fails
-            logger.warning("chromadb_embedding_failed", error=str(e))
-
-        # Calculate processing time
-        processing_time = time.time() - start_time
-
-        logger.info(
-            "invoice_upload_complete",
-            invoice_id=invoice_id,
-            processing_time=processing_time,
-            anomalies=len(anomalies),
-        )
-
-        return InvoiceUploadResponse(
-            success=True,
-            message=f"Invoice {invoice.invoice_number} processed successfully",
-            invoice_id=invoice_id,
-            invoice_number=invoice.invoice_number,
-            amount=invoice.amount,
-            line_items_count=len(invoice.line_items),
-            validation_anomalies=anomaly_responses,
-            processing_time_seconds=round(processing_time, 2),
-        )
-
-    except Exception as e:
-        logger.error("invoice_upload_failed", error=str(e), filename=file.filename)
-
-        return InvoiceUploadResponse(
-            success=False,
-            message=f"Failed to process invoice: {str(e)}",
-            processing_time_seconds=round(time.time() - start_time, 2),
-        )
-
-    finally:
-        # Clean up temp file
-        if temp_file_path and temp_file_path.exists():
-            temp_file_path.unlink()
-            logger.debug("temp_file_deleted", path=str(temp_file_path))
-
-
-@router.get("/invoices/{invoice_id}", response_model=InvoiceDetailResponse)
-async def get_invoice(invoice_id: str):
-    """
-    Get invoice details by ID.
-
-    Args:
-        invoice_id: Invoice ID from Neo4j
-
-    Returns:
-        Invoice with line items
-    """
-    logger.info("invoice_detail_requested", invoice_id=invoice_id)
-
-    try:
-        invoice_data = graph_builder.get_invoice_by_id(invoice_id)
-
-        if not invoice_data:
-            raise HTTPException(status_code=404, detail="Invoice not found")
-
-        # Convert to response model
-        line_items = [LineItemResponse(**item) for item in invoice_data["line_items"]]
-
-        response = InvoiceDetailResponse(
-            id=invoice_data["id"],
-            invoice_number=invoice_data["invoice_number"],
-            date=invoice_data["date"],
-            due_date=invoice_data["due_date"],
-            amount=invoice_data["amount"],
-            status=invoice_data["status"],
-            contractor_name=invoice_data["contractor_name"],
-            line_items=line_items,
-        )
-
-        logger.info("invoice_detail_retrieved", invoice_id=invoice_id)
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("invoice_detail_failed", invoice_id=invoice_id, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve invoice: {e}")
+workflow_manager = WorkflowManager()
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -258,109 +66,6 @@ async def health_check():
 
 
 # Phase 3: LangGraph Workflow Endpoints
-
-
-@router.post("/invoices/upload-graph", response_model=InvoiceUploadResponse)
-async def upload_invoice_with_workflow(file: UploadFile = File(...)):
-    """
-    Upload and process an invoice PDF using LangGraph workflow.
-
-    Pipeline (with conditional routing):
-    1. Extract text from PDF
-    2. Structure invoice with LLM (retry with critic if needed)
-    3. Validate invoice (quarantine if high risk)
-    4. Insert into Neo4j graph
-    5. Embed in ChromaDB
-    6. Return response (or quarantine for review)
-    """
-    start_time = time.time()
-
-    logger.info("invoice_upload_graph_started", filename=file.filename)
-
-    # Validate file type
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-
-    # Check file size
-    file.file.seek(0, 2)
-    file_size = file.file.tell()
-    file.file.seek(0)
-
-    if file_size > settings.api_upload_max_size:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
-        )
-
-    temp_file_path = None
-
-    try:
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file_path = Path(temp_file.name)
-
-        logger.info("temp_file_created", path=str(temp_file_path))
-
-        # Execute LangGraph workflow
-        final_state = workflow_manager.execute_sync(temp_file_path)
-
-        # Extract response data
-        extracted_data = final_state.get("extracted_data", {})
-        anomaly_dicts = final_state.get("anomalies", [])
-
-        # Convert anomalies to response models
-        anomaly_responses = [ValidationAnomalyResponse(**a) for a in anomaly_dicts]
-
-        # Check if workflow was quarantined
-        is_quarantined = final_state.get("status") == "quarantined"
-
-        # Calculate processing time
-        processing_time = time.time() - start_time
-
-        logger.info(
-            "invoice_upload_graph_complete",
-            document_id=final_state["document_id"],
-            status=final_state.get("status"),
-            processing_time=processing_time,
-        )
-
-        return InvoiceUploadResponse(
-            success=final_state.get("status") in ["completed", "quarantined"],
-            message=(
-                f"Invoice {extracted_data.get('invoice_number', 'N/A')} requires human review"
-                if is_quarantined
-                else f"Invoice {extracted_data.get('invoice_number', 'N/A')} processed successfully"
-            ),
-            invoice_id=final_state.get("neo4j_id"),
-            invoice_number=extracted_data.get("invoice_number"),
-            amount=extracted_data.get("total_amount"),
-            line_items_count=len(extracted_data.get("line_items", [])),
-            validation_anomalies=anomaly_responses,
-            processing_time_seconds=round(processing_time, 2),
-            workflow_id=final_state["document_id"],
-            retry_count=final_state.get("retry_count", 0),
-            risk_level=final_state.get("risk_level"),
-            requires_review=is_quarantined,
-        )
-
-    except Exception as e:
-        logger.error(
-            "invoice_upload_graph_failed", error=str(e), filename=file.filename
-        )
-
-        return InvoiceUploadResponse(
-            success=False,
-            message=f"Failed to process invoice: {str(e)}",
-            processing_time_seconds=round(time.time() - start_time, 2),
-        )
-
-    finally:
-        # Clean up temp file
-        if temp_file_path and temp_file_path.exists():
-            temp_file_path.unlink()
-            logger.debug("temp_file_deleted", path=str(temp_file_path))
 
 
 @router.get("/workflows/quarantined", response_model=List[QuarantinedWorkflowResponse])
@@ -595,251 +300,6 @@ async def get_graph_stats():
     except Exception as e:
         logger.error("graph_stats_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to get graph stats: {e}")
-
-
-@router.post("/contracts/upload", response_model=ContractUploadResponse)
-async def upload_contract(file: UploadFile = File(...)):
-    """
-    Upload and process a contract PDF.
-
-    Pipeline:
-    1. Save uploaded file to temp
-    2. Extract with ContractExtractor (pdfplumber + Groq/Llama3)
-    3. Validate extracted terms
-    4. Insert into Neo4j graph
-    5. Return extracted contract data
-    """
-    start_time = time.time()
-
-    logger.info("contract_upload_started", filename=file.filename)
-
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-
-    file.file.seek(0, 2)
-    file_size = file.file.tell()
-    file.file.seek(0)
-
-    if file_size > settings.api_upload_max_size:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
-        )
-
-    temp_file_path = None
-
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file_path = Path(temp_file.name)
-
-        logger.info("temp_file_created", path=str(temp_file_path))
-
-        # Extract raw text and structure with LLM
-        raw_text = contract_extractor._extract_text_from_pdf(temp_file_path)
-        contract_data = contract_extractor.structure_contract(raw_text)
-
-        # Validate and collect warnings
-        warnings = contract_extractor.validate_extracted_contract(contract_data)
-
-        # Build Contract model (reuses the structured data)
-        contract = contract_extractor._build_contract_model(contract_data, warnings)
-
-        # Insert into Neo4j
-        contract_id = graph_builder.insert_contract(contract)
-
-        processing_time = time.time() - start_time
-
-        logger.info(
-            "contract_upload_complete",
-            contract_id=contract_id,
-            processing_time=processing_time,
-        )
-
-        return ContractUploadResponse(
-            success=True,
-            message=f"Contract {contract.id} processed successfully",
-            contract_id=contract.id,
-            contractor_name=contract.contractor_name,
-            project_name=contract.project_name,
-            value=contract.value,
-            retention_rate=contract.retention_rate,
-            start_date=contract.start_date,
-            end_date=contract.end_date,
-            approved_cost_codes=contract.approved_cost_codes,
-            unit_price_schedule={
-                k: float(v) for k, v in contract.unit_price_schedule.items()
-            },
-            extraction_warnings=warnings,
-            processing_time_seconds=round(processing_time, 2),
-        )
-
-    except Exception as e:
-        logger.error("contract_upload_failed", error=str(e), filename=file.filename)
-
-        return ContractUploadResponse(
-            success=False,
-            message=f"Failed to process contract: {str(e)}",
-            processing_time_seconds=round(time.time() - start_time, 2),
-        )
-
-    finally:
-        if temp_file_path and temp_file_path.exists():
-            temp_file_path.unlink()
-            logger.debug("temp_file_deleted", path=str(temp_file_path))
-
-
-@router.get("/contracts/{contract_id}", response_model=ContractDetailResponse)
-async def get_contract(contract_id: str):
-    """
-    Get contract details by ID.
-
-    Args:
-        contract_id: Contract ID
-
-    Returns:
-        Contract details
-    """
-    logger.info("contract_detail_requested", contract_id=contract_id)
-
-    try:
-        contract_data = graph_builder.get_contract_by_id(contract_id)
-
-        if not contract_data:
-            raise HTTPException(status_code=404, detail="Contract not found")
-
-        return ContractDetailResponse(**contract_data)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("contract_detail_failed", contract_id=contract_id, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve contract: {e}")
-
-
-@router.post("/budgets/upload", response_model=BudgetUploadResponse)
-async def upload_budget(file: UploadFile = File(...)):
-    """
-    Upload and process a budget Excel/CSV file.
-
-    Pipeline:
-    1. Save uploaded file to temp
-    2. Extract with BudgetExtractor (pandas + Groq/Llama3)
-    3. Validate budget data
-    4. Insert into Neo4j graph
-    5. Return budget summary
-
-    Args:
-        file: Excel (.xlsx, .xls) or CSV file
-
-    Returns:
-        Budget upload response with summary
-    """
-    start_time = time.time()
-
-    logger.info("budget_upload_started", filename=file.filename)
-
-    # Validate file type
-    if not file.filename.endswith((".xlsx", ".xls", ".csv")):
-        raise HTTPException(
-            status_code=400,
-            detail="Only Excel (.xlsx, .xls) and CSV (.csv) files are supported",
-        )
-
-    # Check file size
-    file.file.seek(0, 2)
-    file_size = file.file.tell()
-    file.file.seek(0)
-
-    if file_size > settings.api_upload_max_size:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {settings.api_upload_max_size} bytes",
-        )
-
-    temp_file_path = None
-
-    try:
-        # Save to temp file
-        suffix = Path(file.filename).suffix
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_file_path = Path(temp_file.name)
-
-        logger.info("temp_file_created", path=str(temp_file_path))
-
-        # Extract budget data
-        from backend.agents.budget_extractor import BudgetExtractor
-
-        extractor = BudgetExtractor()
-        budget_data = extractor.extract_and_validate(temp_file_path)
-
-        # Build Budget and BudgetLine models
-        from backend.core.models import Budget, BudgetLine
-
-        budget = Budget(
-            id=(
-                budget_data["budget_id"]
-                if "budget_id" in budget_data
-                else budget_data["project_id"] + "-BUD-001"
-            ),
-            project_id=budget_data["project_id"],
-            project_name=budget_data["project_name"],
-            total_allocated=budget_data["metadata"]["total_allocated"],
-            total_spent=budget_data["metadata"]["total_spent"],
-            total_remaining=budget_data["metadata"]["total_allocated"]
-            - budget_data["metadata"]["total_spent"],
-            line_count=budget_data["metadata"]["line_count"],
-            extracted_at=datetime.fromisoformat(
-                budget_data["metadata"]["extracted_at"]
-            ),
-            validation_warnings=budget_data["metadata"]["validation_warnings"],
-        )
-
-        budget_lines = [
-            BudgetLine(**line_data) for line_data in budget_data["budget_lines"]
-        ]
-
-        # Insert into Neo4j
-        budget_id = graph_builder.insert_budget(budget, budget_lines)
-
-        processing_time = time.time() - start_time
-
-        logger.info(
-            "budget_upload_complete",
-            budget_id=budget_id,
-            processing_time=processing_time,
-        )
-
-        return BudgetUploadResponse(
-            success=True,
-            message=f"Budget for {budget.project_name} processed successfully",
-            budget_id=budget.id,
-            project_id=budget.project_id,
-            project_name=budget.project_name,
-            total_allocated=float(budget.total_allocated),
-            total_spent=float(budget.total_spent),
-            total_remaining=float(budget.total_remaining),
-            line_count=budget.line_count,
-            validation_warnings=budget.validation_warnings,
-            processing_time_seconds=round(processing_time, 2),
-        )
-
-    except Exception as e:
-        logger.error("budget_upload_failed", error=str(e), filename=file.filename)
-
-        return BudgetUploadResponse(
-            success=False,
-            message=f"Failed to process budget: {str(e)}",
-            processing_time_seconds=round(time.time() - start_time, 2),
-        )
-
-    finally:
-        if temp_file_path and temp_file_path.exists():
-            temp_file_path.unlink()
-            logger.debug("temp_file_deleted", path=str(temp_file_path))
 
 
 @router.get("/budgets/{budget_id}", response_model=BudgetDetailResponse)
@@ -1360,4 +820,145 @@ def _create_event_data(
             "display_data": state_update.get("display_data"),
         }
 
+    elif node_name == "upload_agent":
+        execution_results = state_update.get("execution_results", {})
+        return {
+            "stage": "upload",
+            "status": execution_results.get("status"),
+            "results": execution_results.get("results", []),
+            "metadata": execution_results.get("metadata", {}),
+        }
+
     return None
+
+
+@router.post("/chat/upload", response_model=ChatResponse)
+async def chat_upload(
+    files: List[UploadFile] = File(...),
+    message: str = Form(""),
+    session_id: str = Form(None),
+):
+    """
+    Multi-file upload endpoint that routes through the multi-agent system.
+
+    The planner classifies each file (invoice/contract/budget) and emits an
+    upload_plan. The UploadAgent processes all files, then the Validator and
+    Responder format the result.
+
+    Args:
+        files: One or more uploaded files (PDF, xlsx, csv)
+        message: Optional user instruction
+        session_id: Optional session ID for conversation persistence
+
+    Returns:
+        ChatResponse with processing summary
+    """
+    start_time = time.time()
+
+    logger.info("chat_upload_request_received", file_count=len(files))
+
+    temp_paths = []
+
+    try:
+        # Save each file to a named temp file
+        file_descriptions = []
+        for uploaded_file in files:
+            suffix = Path(uploaded_file.filename).suffix or ".tmp"
+
+            # Validate file size
+            content = await uploaded_file.read()
+            if len(content) > settings.api_upload_max_size:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File '{uploaded_file.filename}' too large. "
+                           f"Maximum size: {settings.api_upload_max_size} bytes",
+                )
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+
+            temp_paths.append(tmp_path)
+            file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
+            logger.info("chat_upload_temp_saved", filename=uploaded_file.filename, path=tmp_path)
+
+        # Build the initial message for the planner
+        file_list_str = "\n".join(file_descriptions)
+        count = len(files)
+        initial_message = (
+            f"User uploaded {count} file(s):\n{file_list_str}\n"
+        )
+        if message.strip():
+            initial_message += f"\n{message.strip()}\n"
+        initial_message += "\nPlease identify and process each document."
+
+        # Import and run orchestrator
+        from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+
+        graph = create_multi_agent_graph()
+
+        initial_state = {
+            "user_query": initial_message,
+            "conversation_history": [],
+            "retry_count": 0,
+            "current_step": 0,
+            "completed_steps": [],
+            "react_max_steps": 5,
+        }
+
+        config = {"configurable": {"thread_id": session_id or "upload_default"}}
+        final_state = graph.invoke(initial_state, config)
+
+        response_text = final_state.get("final_response", "")
+        display_format = final_state.get("display_format", "text")
+        display_data = final_state.get("display_data")
+        route = final_state.get("route", "unknown")
+
+        metadata = {
+            "processing_time_seconds": round(time.time() - start_time, 2),
+            "file_count": count,
+            "retry_count": final_state.get("retry_count", 0),
+        }
+
+        logger.info(
+            "chat_upload_complete",
+            route=route,
+            processing_time=metadata["processing_time_seconds"],
+        )
+
+        return ChatResponse(
+            response=response_text,
+            display_format=display_format,
+            display_data=display_data,
+            route=route,
+            execution_mode="upload",
+            metadata=metadata,
+            session_id=session_id,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("chat_upload_failed", error=str(e))
+        return ChatResponse(
+            response=f"I encountered an error while processing your files: {str(e)}",
+            display_format="text",
+            display_data=None,
+            route="generic_response",
+            execution_mode=None,
+            metadata={
+                "error": str(e),
+                "processing_time_seconds": round(time.time() - start_time, 2),
+            },
+            session_id=session_id,
+        )
+    finally:
+        # Clean up any temp files not already deleted by tools
+        for tmp_path in temp_paths:
+            try:
+                p = Path(tmp_path)
+                if p.exists():
+                    p.unlink()
+                    logger.debug("chat_upload_temp_cleaned", path=tmp_path)
+            except Exception as cleanup_err:
+                logger.warning("chat_upload_cleanup_failed", path=tmp_path, error=str(cleanup_err))

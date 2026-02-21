@@ -11,6 +11,10 @@ Available Tools:
 - DateTimeTool: Get current date or calculate relative dates
 - WebSearchTool: Search web for market rates, contractor info
 - PythonREPLTool: Complex calculations and data analysis
+- WorkflowTool: Manage document processing workflows
+  * Actions: list_quarantined (find items awaiting review)
+  * get_status|workflow_id=<id> (check workflow status)
+  * resume|workflow_id=<id>|approved=true/false|notes=... (approve/reject quarantined items)
 {% endmacro %}
 
 {# Macro: JSON response instruction #}
@@ -37,6 +41,17 @@ Validation Criteria:
 2. **Correctness**: Are the results relevant to the user's query?
 3. **Data Quality**: Do the results contain actual data (not empty)?
 4. **Error Handling**: Were errors properly handled or escalated?
+{% endmacro %}
+
+{# Macro: Upload tool list #}
+{% macro upload_tool_list() %}
+Upload Tools (use only with upload_plan route):
+- InvoiceUploadTool: Extract and store a PDF invoice
+  * action: process|file_path=<path>
+- ContractUploadTool: Extract and store a PDF contract
+  * action: process|file_path=<path>
+- BudgetUploadTool: Extract and store an Excel/CSV budget
+  * action: process|file_path=<path>
 {% endmacro %}
 
 {# Macro: Execution modes explanation #}

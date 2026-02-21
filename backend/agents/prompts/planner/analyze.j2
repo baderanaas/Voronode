@@ -1,4 +1,4 @@
-{% from "common/macros.j2" import tool_list, execution_modes %}
+{% from "common/macros.j2" import tool_list, execution_modes, upload_tool_list %}
 {% include "planner/_system_context.j2" %}
 
 Analyze this user query and decide how to handle it.
@@ -12,23 +12,29 @@ Conversation History: {{ history[-5:] if history else [] }}
 
 {{ tool_list() }}
 
+{{ upload_tool_list() }}
+
 Respond in JSON:
 {
     "route": "<route_type>",
     "execution_mode": "one_way" | "react",  // Only if execution_plan
     "reasoning": "<why this route and mode>",
     "response": "<text if generic_response or clarification>",
-    "plan": {  // Only if execution_plan
+    "plan": {  // Only if execution_plan or upload_plan
         "intent": "<what user wants>",
-        "one_way": {  // If execution_mode = one_way
+        "one_way": {  // If execution_plan + one_way
             "steps": [
                 {"tool": "CypherQueryTool", "action": "Find invoices > $50k"},
                 {"tool": "CalculatorTool", "action": "Sum total amounts"}
             ]
         },
-        "react": {  // If execution_mode = react
+        "react": {  // If execution_plan + react
             "initial_step": {"tool": "CypherQueryTool", "action": "Find most expensive project"},
             "strategy": "Find project → get contractors → calculate variance → identify highest"
-        }
+        },
+        "steps": [  // If upload_plan (flat list, no execution_mode needed)
+            {"tool": "InvoiceUploadTool", "action": "process|file_path=/tmp/abc.pdf"},
+            {"tool": "ContractUploadTool", "action": "process|file_path=/tmp/xyz.pdf"}
+        ]
     }
 }

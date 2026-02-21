@@ -13,6 +13,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from backend.agents.multi_agent.state import ConversationState
 from backend.agents.multi_agent.planner_agent import PlannerAgent
 from backend.agents.multi_agent.executor_agent import ExecutorAgent
+from backend.agents.multi_agent.upload_agent import UploadAgent
 from backend.agents.multi_agent.validator_agent import ValidatorAgent
 from backend.agents.multi_agent.responder_agent import ResponderAgent
 
@@ -73,6 +74,10 @@ def planner_node(state: ConversationState) -> ConversationState:
     if output["route"] == "execution_plan":
         state["execution_mode"] = output.get("execution_mode", "one_way")
         state["react_max_steps"] = 5  # Default max steps for ReAct
+        state["current_step"] = 0
+        state["completed_steps"] = []
+    elif output["route"] == "upload_plan":
+        state["execution_mode"] = "upload"
         state["current_step"] = 0
         state["completed_steps"] = []
 
@@ -159,6 +164,35 @@ def executor_node(state: ConversationState) -> ConversationState:
         "executor_node_complete",
         mode=execution_mode,
         status=state["execution_results"].get("status"),
+    )
+
+    return state
+
+
+def upload_agent_node(state: ConversationState) -> ConversationState:
+    """
+    Upload agent node.
+
+    Handles document ingestion steps from an upload_plan:
+    InvoiceUploadTool, ContractUploadTool, BudgetUploadTool
+    """
+    upload_agent = UploadAgent()
+
+    logger.info("upload_agent_node_executing")
+
+    plan = state["planner_output"].get("plan", {})
+
+    results = upload_agent.execute(
+        plan=plan,
+        user_query=state["user_query"],
+    )
+
+    state["execution_results"] = results
+
+    logger.info(
+        "upload_agent_node_complete",
+        status=results.get("status"),
+        steps_completed=results.get("metadata", {}).get("steps_completed"),
     )
 
     return state
@@ -318,6 +352,10 @@ def route_after_planner(state: ConversationState) -> str:
         # Data queries go to Executor
         logger.info("route_execution", mode=state.get("execution_mode"))
         return "executor"
+    elif route == "upload_plan":
+        # Document uploads go to UploadAgent
+        logger.info("route_upload")
+        return "upload_agent"
 
     # Default to responder
     return "responder"
@@ -402,6 +440,7 @@ def create_multi_agent_graph():
     # Add nodes
     workflow.add_node("planner", planner_node)
     workflow.add_node("executor", executor_node)
+    workflow.add_node("upload_agent", upload_agent_node)
     workflow.add_node("planner_react", planner_react_node)
     workflow.add_node("validator", validator_node)
     workflow.add_node("responder", responder_node)
@@ -415,9 +454,13 @@ def create_multi_agent_graph():
         route_after_planner,
         {
             "executor": "executor",
+            "upload_agent": "upload_agent",
             "responder": "responder",
         },
     )
+
+    # upload_agent → validator (same path as executor one_way)
+    workflow.add_edge("upload_agent", "validator")
 
     workflow.add_conditional_edges(
         "executor",
