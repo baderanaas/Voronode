@@ -21,22 +21,50 @@ class ChromaDBClient:
         )
         self._init_collections()
 
+    def _get_or_recreate_collection(self, name: str, description: str):
+        """
+        Get or create a collection, automatically recreating it if the stored
+        embedding model doesn't match the current one (prevents dimension mismatch).
+        """
+        meta = {
+            "description": description,
+            "embedding_model": settings.openai_embedding_model,
+        }
+        try:
+            col = self.client.get_collection(name)
+            stored_model = col.metadata.get("embedding_model", "")
+            if stored_model != settings.openai_embedding_model:
+                logger.warning(
+                    "chromadb_model_mismatch_recreating",
+                    collection=name,
+                    stored=stored_model,
+                    current=settings.openai_embedding_model,
+                )
+                self.client.delete_collection(name)
+                col = self.client.create_collection(
+                    name=name, metadata=meta, embedding_function=self.embedding_function
+                )
+            else:
+                # Reattach embedding function (get_collection doesn't store it)
+                col = self.client.get_or_create_collection(
+                    name=name, metadata=meta, embedding_function=self.embedding_function
+                )
+        except Exception:
+            col = self.client.get_or_create_collection(
+                name=name, metadata=meta, embedding_function=self.embedding_function
+            )
+        return col
+
     def _init_collections(self):
-        """Create collections for different document types"""
-        self.contracts_collection = self.client.get_or_create_collection(
-            name="contracts",
-            metadata={"description": "Contract text and clauses"},
-            embedding_function=self.embedding_function,
+        """Create collections for different document types."""
+        self.contracts_collection = self._get_or_recreate_collection(
+            "contracts", "Contract text and clauses"
         )
-        self.emails_collection = self.client.get_or_create_collection(
-            name="emails",
-            metadata={"description": "Email threads and communications"},
-            embedding_function=self.embedding_function,
+        self.emails_collection = self._get_or_recreate_collection(
+            "emails", "Email threads and communications"
         )
-        self.invoices_collection = self.client.get_or_create_collection(
-            name="invoices",
-            metadata={"description": "Invoice text for semantic search"},
-            embedding_function=self.embedding_function,
+        self.invoices_collection = self._get_or_recreate_collection(
+            "invoices", "Invoice text for semantic search"
         )
 
     def verify_connectivity(self) -> bool:

@@ -24,7 +24,6 @@ from backend.api.schemas import (
     BudgetDetailResponse,
     BudgetVarianceResponse,
     BudgetLineResponse,
-    ChatRequest,
     ChatResponse,
     ChatStreamEvent,
 )
@@ -64,11 +63,10 @@ async def health_check():
     logger.info("health_check", status=overall_status, services=services_status)
 
     return HealthResponse(
-        status=overall_status, services=services_status, timestamp=datetime.now(timezone.utc)
+        status=overall_status,
+        services=services_status,
+        timestamp=datetime.now(timezone.utc),
     )
-
-
-# Phase 3: LangGraph Workflow Endpoints
 
 
 @router.get("/workflows/quarantined", response_model=List[QuarantinedWorkflowResponse])
@@ -326,9 +324,6 @@ async def get_budget(budget_id: str):
         if not budget_data:
             raise HTTPException(status_code=404, detail="Budget not found")
 
-        # Convert budget lines to response format
-        from backend.api.schemas import BudgetLineResponse
-
         budget_lines = [
             BudgetLineResponse(
                 id=line["id"],
@@ -508,9 +503,6 @@ async def query_graph(query: dict):
         raise HTTPException(status_code=500, detail=f"Query execution failed: {e}")
 
 
-# Phase 7: Conversational AI Chat Endpoint
-
-
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     message: str = Form(""),
@@ -544,9 +536,10 @@ async def chat(
 
     temp_paths = []
     upload_summary = ""
+    prompt_intent = ""
+    steps_completed = 0
 
     try:
-        # ── Step 1: Process uploaded files ──────────────────────────────────
         if files:
             logger.info("chat_upload_request_received", file_count=len(files))
 
@@ -602,9 +595,23 @@ async def chat(
             config = {"configurable": {"thread_id": session_id or "upload_default"}}
             final_upload_state = graph.invoke(upload_state, config)
             upload_summary = final_upload_state.get("final_response", "")
+            upload_display_data = final_upload_state.get("display_data")
+            upload_display_format = final_upload_state.get("display_format", "text")
+
+            prompt_intent = (
+                final_upload_state.get("planner_output", {})
+                .get("plan", {})
+                .get("intent", "")
+                .strip()
+            )
+            steps_completed = (
+                final_upload_state.get("execution_results", {})
+                .get("metadata", {})
+                .get("steps_completed", 0)
+            )
 
             # Files only — return upload result immediately, no second graph call
-            if not message.strip():
+            if not message.strip() and not prompt_intent:
                 metadata = {
                     "processing_time_seconds": round(time.time() - start_time, 2),
                     "file_count": count,
@@ -624,17 +631,18 @@ async def chat(
                     session_id=session_id,
                 )
 
-        # ── Step 2: Process chat message ─────────────────────────────────────
         try:
             history = json.loads(conversation_history)
         except json.JSONDecodeError:
             history = []
 
-        # Combine upload summary with user message when both are present
+        # Combine upload summary with user message when both are present.
+        # Question first so the planner routes on intent, not on upload context.
+        effective_message = message.strip() or prompt_intent
         full_message = (
-            f"[Upload result: {upload_summary}]\n\n{message}"
-            if upload_summary
-            else message
+            f"{effective_message}\n\n[Context — documents just processed: {upload_summary}]"
+            if steps_completed > 0
+            else effective_message
         )
 
         logger.info("chat_request_received", message=full_message[:100])
@@ -652,10 +660,21 @@ async def chat(
         config = {"configurable": {"thread_id": session_id or "default"}}
         final_state = graph.invoke(initial_state, config)
 
-        response_text = final_state.get("final_response", "")
-        display_format = final_state.get("display_format", "text")
-        display_data = final_state.get("display_data")
         route = final_state.get("route", "unknown")
+
+        # Short-circuit: planner answered from context — use its text + upload's display_data
+        if route == "generic_response" and upload_summary:
+            planner_text = final_state.get("planner_output", {}).get(
+                "response", ""
+            ) or final_state.get("final_response", "")
+            response_text = planner_text
+            display_format = upload_display_format
+            display_data = upload_display_data
+            logger.info("chat_generic_shortcut", session_id=session_id)
+        else:
+            response_text = final_state.get("final_response", "")
+            display_format = final_state.get("display_format", "text")
+            display_data = final_state.get("display_data")
         execution_mode = final_state.get("execution_mode")
 
         metadata = {
@@ -712,24 +731,33 @@ async def chat(
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: ChatRequest):
+async def chat_stream(
+    message: str = Form(""),
+    files: Optional[List[UploadFile]] = File(None),
+    conversation_history: str = Form("[]"),
+    session_id: Optional[str] = Form(None),
+):
     """
     Streaming conversational AI endpoint using multi-agent system.
 
-    Returns Server-Sent Events (SSE) with real-time updates as the multi-agent
-    system processes the query.
+    Accepts the same multipart form as /chat.  Returns Server-Sent Events (SSE)
+    with real-time stage labels as each graph node completes.
 
     Events:
     - planner: Planning stage updates (route, execution mode, plan)
+    - upload_agent: Upload execution updates
     - executor: Tool execution updates (tool name, status, results)
     - planner_react: ReAct planning updates (next step decision)
     - validator: Validation updates (validation result, issues)
     - responder: Final response formatting
-    - complete: Processing complete with final response
+    - complete: Processing complete with timing
     - error: Error occurred during processing
 
     Args:
-        request: User message and conversation history
+        message: User message text (Form, optional)
+        files: One or more uploaded files (File, optional)
+        conversation_history: JSON-encoded list of {role, content} dicts (Form)
+        session_id: Session ID for conversation persistence (Form, optional)
 
     Returns:
         StreamingResponse with Server-Sent Events
@@ -738,59 +766,213 @@ async def chat_stream(request: ChatRequest):
     async def generate_events():
         """Generate SSE events from multi-agent graph stream."""
         start_time = time.time()
+        temp_paths: list[str] = []
+        upload_summary = ""
+        upload_display_data = None
+        upload_display_format = "text"
+        prompt_intent = ""
+        steps_completed = 0
 
-        logger.info("chat_stream_request_received", message=request.message[:100])
+        def _emit(node_name: str, state_update: dict) -> str:
+            event_data = _create_event_data(node_name, state_update)
+            if event_data is None:
+                return ""
+            event = ChatStreamEvent(
+                event=node_name,
+                data=event_data,
+                timestamp=datetime.now(timezone.utc),
+            )
+            logger.debug(
+                "chat_stream_event_sent", node=node_name, session_id=session_id
+            )
+            return f"data: {event.model_dump_json()}\n\n"
 
         try:
-            # Initialize multi-agent graph
-            graph = create_multi_agent_graph()
+            if files:
+                logger.info("chat_stream_upload_start", file_count=len(files))
 
-            # Convert conversation history to state format
-            history = [
-                {"role": msg.role, "content": msg.content}
-                for msg in request.conversation_history
-            ]
+                file_descriptions = []
+                for uploaded_file in files:
+                    suffix = Path(uploaded_file.filename).suffix or ".tmp"
+                    content = await uploaded_file.read()
 
-            # Create initial state
+                    if len(content) > settings.api_upload_max_size:
+                        error_event = ChatStreamEvent(
+                            event="error",
+                            data={
+                                "error": f"File '{uploaded_file.filename}' too large.",
+                                "message": f"File '{uploaded_file.filename}' exceeds the maximum upload size.",
+                            },
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                        yield f"data: {error_event.model_dump_json()}\n\n"
+                        return
+
+                    with tempfile.NamedTemporaryFile(
+                        delete=False, suffix=suffix
+                    ) as tmp:
+                        tmp.write(content)
+                        tmp_path = tmp.name
+
+                    temp_paths.append(tmp_path)
+                    file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
+                    logger.info(
+                        "chat_stream_temp_saved",
+                        filename=uploaded_file.filename,
+                        path=tmp_path,
+                    )
+
+                file_previews = []
+                for desc, tmp_path in zip(file_descriptions, temp_paths):
+                    preview = _extract_file_preview(tmp_path)
+                    if preview:
+                        file_previews.append(f"{desc}\n  Content preview: {preview}")
+                    else:
+                        file_previews.append(desc)
+
+                file_list_str = "\n".join(file_previews)
+                count = len(files)
+                upload_message = (
+                    f"User uploaded {count} file(s):\n{file_list_str}\n\n"
+                    "Please identify and process each document."
+                )
+
+                upload_graph = create_multi_agent_graph()
+                upload_state = {
+                    "user_query": upload_message,
+                    "conversation_history": [],
+                    "retry_count": 0,
+                    "current_step": 0,
+                    "completed_steps": [],
+                    "react_max_steps": 5,
+                }
+                upload_config = {
+                    "configurable": {"thread_id": f"{session_id or 'stream'}_upload"}
+                }
+
+                for chunk in upload_graph.stream(upload_state, upload_config):
+                    node_name = list(chunk.keys())[0]
+                    state_update = chunk[node_name]
+
+                    # Capture values we need for the chat phase
+                    if node_name == "planner":
+                        prompt_intent = (
+                            state_update.get("planner_output", {})
+                            .get("plan", {})
+                            .get("intent", "")
+                            .strip()
+                        )
+                    elif node_name == "upload_agent":
+                        steps_completed = (
+                            state_update.get("execution_results", {})
+                            .get("metadata", {})
+                            .get("steps_completed", 0)
+                        )
+                    elif node_name == "responder":
+                        upload_summary = state_update.get("final_response", "")
+                        upload_display_data = state_update.get("display_data")
+                        upload_display_format = state_update.get(
+                            "display_format", "text"
+                        )
+
+                    emit_name = (
+                        "upload_summary" if node_name == "responder" else node_name
+                    )
+                    event_data = _create_event_data(node_name, state_update)
+                    if event_data:
+                        event = ChatStreamEvent(
+                            event=emit_name,
+                            data=event_data,
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                        logger.debug(
+                            "chat_stream_event_sent",
+                            node=emit_name,
+                            session_id=session_id,
+                        )
+                        yield f"data: {event.model_dump_json()}\n\n"
+
+            if not message.strip() and not prompt_intent:
+                complete_event = ChatStreamEvent(
+                    event="complete",
+                    data={
+                        "message": "Processing complete",
+                        "processing_time_seconds": round(time.time() - start_time, 2),
+                    },
+                    timestamp=datetime.now(timezone.utc),
+                )
+                yield f"data: {complete_event.model_dump_json()}\n\n"
+                return
+
+            effective_message = message.strip() or prompt_intent
+
+            full_message = (
+                f"{effective_message}\n\n[Context — documents just processed: {upload_summary}]"
+                if steps_completed > 0
+                else effective_message
+            )
+
+            logger.info("chat_stream_chat_start", message=full_message[:100])
+
+            try:
+                history = json.loads(conversation_history)
+            except json.JSONDecodeError:
+                history = []
+
+            chat_graph = create_multi_agent_graph()
             initial_state = {
-                "user_query": request.message,
+                "user_query": full_message,
                 "conversation_history": history,
                 "retry_count": 0,
                 "current_step": 0,
                 "completed_steps": [],
                 "react_max_steps": 5,
             }
+            chat_config = {"configurable": {"thread_id": session_id or "default"}}
 
-            # Execute graph with streaming
-            config = {"configurable": {"thread_id": request.session_id or "default"}}
-
-            # Stream state updates
-            for chunk in graph.stream(initial_state, config):
+            phase_c_route = None
+            for chunk in chat_graph.stream(initial_state, chat_config):
                 node_name = list(chunk.keys())[0]
                 state_update = chunk[node_name]
 
-                # Create event based on node
-                event_data = _create_event_data(node_name, state_update)
+                if node_name == "planner":
+                    phase_c_route = state_update.get("route")
 
-                if event_data:
-                    event = ChatStreamEvent(
-                        event=node_name,
-                        data=event_data,
-                        timestamp=datetime.now(timezone.utc),
-                    )
+                    # Short-circuit: if the planner can answer from context (generic_response)
+                    # and we already have an upload summary, skip the validator + responder
+                    # LLM calls.  Emit a synthetic responder event that combines the planner's
+                    # specific answer text with the upload summary's structured display_data.
+                    if phase_c_route == "generic_response" and upload_summary:
+                        planner_text = (
+                            state_update.get("planner_output", {}).get("response", "")
+                            or upload_summary
+                        )
+                        line = _emit(node_name, state_update)
+                        if line:
+                            yield line
 
-                    # Yield SSE format: data: {json}\n\n
-                    yield f"data: {event.model_dump_json()}\n\n"
+                        shortcut_event = ChatStreamEvent(
+                            event="responder",
+                            data={
+                                "stage": "formatting",
+                                "response": planner_text,
+                                "display_format": upload_display_format,
+                                "display_data": upload_display_data,
+                            },
+                            timestamp=datetime.now(timezone.utc),
+                        )
+                        logger.info(
+                            "chat_stream_generic_shortcut",
+                            session_id=session_id,
+                        )
+                        yield f"data: {shortcut_event.model_dump_json()}\n\n"
+                        break  # skip validator + responder nodes
 
-                    logger.debug(
-                        "chat_stream_event_sent",
-                        node=node_name,
-                        session_id=request.session_id,
-                    )
+                line = _emit(node_name, state_update)
+                if line:
+                    yield line
 
-            # Send completion event
             processing_time = time.time() - start_time
-
             complete_event = ChatStreamEvent(
                 event="complete",
                 data={
@@ -799,23 +981,15 @@ async def chat_stream(request: ChatRequest):
                 },
                 timestamp=datetime.now(timezone.utc),
             )
-
             yield f"data: {complete_event.model_dump_json()}\n\n"
-
             logger.info(
                 "chat_stream_complete",
                 processing_time=processing_time,
-                session_id=request.session_id,
+                session_id=session_id,
             )
 
         except Exception as e:
-            logger.error(
-                "chat_stream_failed",
-                error=str(e),
-                message=request.message[:100],
-            )
-
-            # Send error event
+            logger.error("chat_stream_failed", error=str(e))
             error_event = ChatStreamEvent(
                 event="error",
                 data={
@@ -824,8 +998,21 @@ async def chat_stream(request: ChatRequest):
                 },
                 timestamp=datetime.now(timezone.utc),
             )
-
             yield f"data: {error_event.model_dump_json()}\n\n"
+
+        finally:
+            for tmp_path in temp_paths:
+                try:
+                    p = Path(tmp_path)
+                    if p.exists():
+                        p.unlink()
+                        logger.debug("chat_stream_temp_cleaned", path=tmp_path)
+                except Exception as cleanup_err:
+                    logger.warning(
+                        "chat_stream_cleanup_failed",
+                        path=tmp_path,
+                        error=str(cleanup_err),
+                    )
 
     return StreamingResponse(
         generate_events(),
@@ -944,6 +1131,7 @@ def _extract_file_preview(file_path: str, max_chars: int = 500) -> str:
 
         if suffix == ".pdf":
             import pdfplumber
+
             with pdfplumber.open(file_path) as pdf:
                 text = ""
                 for page in pdf.pages[:2]:  # First 2 pages max
@@ -965,11 +1153,12 @@ def _extract_file_preview(file_path: str, max_chars: int = 500) -> str:
 
         elif suffix in (".xlsx", ".xls"):
             import pandas as pd
+
             df = pd.read_excel(file_path, nrows=5)
-            return f"Columns: {', '.join(df.columns)}\n{df.head(3).to_string()}"[:max_chars]
+            return f"Columns: {', '.join(df.columns)}\n{df.head(3).to_string()}"[
+                :max_chars
+            ]
 
     except Exception as e:
         logger.warning("file_preview_extraction_failed", path=file_path, error=str(e))
     return ""
-
-

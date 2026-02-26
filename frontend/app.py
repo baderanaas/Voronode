@@ -366,43 +366,86 @@ if user_input or (submitted and has_pending):
             st.markdown(display_text)
 
     with st.chat_message("assistant"):
-        label = f"Processing {len(pending_files)} file(s)..." if pending_files else "Thinking..."
-        with st.spinner(label):
-            try:
-                history = [
-                    {"role": m["role"], "content": m["content"]}
-                    for m in st.session_state.chat_messages[:-1]
-                    if m.get("content")
-                ]
-                response = api.send(
-                    message=user_input or "",
-                    files=pending_files or None,
-                    conversation_history=history,
-                    session_id=st.session_state.session_id,
-                )
+        initial_label = (
+            f"Processing {len(pending_files)} file(s)..." if pending_files else "Thinking..."
+        )
+        stage_placeholder = st.empty()
+        stage_placeholder.markdown(f"_{initial_label}_")
 
-                response_text = response.get("response", "")
-                display_format = response.get("display_format", "text")
-                display_data = response.get("display_data")
-                metadata = response.get("metadata", {})
+        response_text = ""
+        display_format = "text"
+        display_data = None
+        processing_time = None
 
-                assistant_msg = {
-                    "role": "assistant",
-                    "content": response_text,
-                    "display_format": display_format,
-                    "display_data": display_data,
-                }
-                render_assistant_message(assistant_msg)
-                st.session_state.chat_messages.append(assistant_msg)
+        try:
+            history = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.chat_messages[:-1]
+                if m.get("content")
+            ]
 
-                if "processing_time_seconds" in metadata:
-                    st.caption(f"⏱️ {metadata['processing_time_seconds']:.2f}s")
+            for event in api.stream(
+                message=user_input or "",
+                files=pending_files or None,
+                conversation_history=history,
+                session_id=st.session_state.session_id,
+            ):
+                etype = event.get("event", "")
+                data  = event.get("data", {})
 
-            except Exception as e:
-                err = f"Error: {e}"
-                st.error(err)
-                st.session_state.chat_messages.append(
-                    {"role": "assistant", "content": f"❌ {err}"}
-                )
+                if etype == "planner":
+                    stage_placeholder.markdown(
+                        "_Classifying documents..._" if data.get("route") == "upload_plan"
+                        else "_Planning query..._"
+                    )
+                elif etype == "upload_agent":
+                    stage_placeholder.markdown("_Saving to graph..._")
+                elif etype == "upload_summary":
+                    # Upload-phase responder: use as fallback answer (Phase C may override)
+                    stage_placeholder.markdown("_Formatting..._")
+                    response_text  = data.get("response", response_text)
+                    display_format = data.get("display_format", "text")
+                    display_data   = data.get("display_data")
+                elif etype == "executor":
+                    stage_placeholder.markdown("_Querying data..._")
+                elif etype == "validator":
+                    stage_placeholder.markdown("_Reviewing answer..._")
+                elif etype == "responder":
+                    # Chat-phase responder: always overrides response text;
+                    # only override display_data if the chat phase actually produced data
+                    stage_placeholder.markdown("_Formatting..._")
+                    response_text = data.get("response", response_text)
+                    if data.get("display_data") is not None:
+                        display_format = data.get("display_format", "text")
+                        display_data   = data.get("display_data")
+                elif etype == "complete":
+                    processing_time = data.get("processing_time_seconds")
+                elif etype == "error":
+                    err = data.get("message", data.get("error", "Unknown error"))
+                    stage_placeholder.empty()
+                    st.error(err)
+                    st.session_state.chat_messages.append(
+                        {"role": "assistant", "content": f"Error: {err}"}
+                    )
+                    st.rerun()
+
+            stage_placeholder.empty()
+            assistant_msg = {
+                "role": "assistant",
+                "content": response_text,
+                "display_format": display_format,
+                "display_data": display_data,
+            }
+            render_assistant_message(assistant_msg)
+            st.session_state.chat_messages.append(assistant_msg)
+            if processing_time is not None:
+                st.caption(f"⏱️ {processing_time:.2f}s")
+
+        except Exception as e:
+            stage_placeholder.empty()
+            st.error(f"Error: {e}")
+            st.session_state.chat_messages.append(
+                {"role": "assistant", "content": f"Error: {e}"}
+            )
 
     st.rerun()

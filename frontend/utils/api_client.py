@@ -18,9 +18,7 @@ class APIClient:
         self.base_url = base_url
         self.timeout = 3600
 
-    def _request(
-        self, method: str, endpoint: str, **kwargs
-    ) -> requests.Response:
+    def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Make HTTP request with error handling."""
         url = f"{self.base_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
@@ -31,7 +29,9 @@ class APIClient:
             return response
         except requests.exceptions.ConnectionError:
             st.error(f"❌ Cannot connect to backend at {self.base_url}")
-            st.info("Make sure the FastAPI server is running: `uvicorn backend.main:app --reload`")
+            st.info(
+                "Make sure the FastAPI server is running: `uvicorn backend.main:app --reload`"
+            )
             raise
         except requests.exceptions.Timeout:
             st.error(f"⏱️ Request timed out after {self.timeout}s")
@@ -45,7 +45,6 @@ class APIClient:
         """Check API health status."""
         response = self._request("GET", "/api/health")
         return response.json()
-
 
     # Workflow Management
     @st.cache_data(ttl=10)
@@ -198,6 +197,66 @@ class APIClient:
         )
         response = self._request("POST", "/api/chat", data=data, files=multipart_files)
         return response.json()
+
+    def stream(
+        self,
+        message: str = "",
+        files: Optional[List[Dict[str, Any]]] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        session_id: Optional[str] = None,
+    ):
+        """
+        Send a message and/or files to the streaming chat endpoint.
+
+        Yields parsed SSE event dicts as they arrive from /api/chat/stream.
+
+        Args:
+            message: User message text (optional when files are provided)
+            files: List of {"bytes": b"...", "name": "file.pdf"} dicts (optional)
+            conversation_history: List of {"role": ..., "content": ...} dicts
+            session_id: Optional session ID for conversation persistence
+
+        Yields:
+            Parsed event dicts with "event" and "data" keys
+        """
+        import json as _json
+
+        url = f"{self.base_url}/api/chat/stream"
+        data = {
+            "message": message,
+            "conversation_history": _json.dumps(conversation_history or []),
+            "session_id": session_id or "",
+        }
+        multipart_files = (
+            [("files", (f["name"], f["bytes"])) for f in files] if files else None
+        )
+        try:
+            with requests.post(
+                url,
+                data=data,
+                files=multipart_files,
+                stream=True,
+                timeout=self.timeout,
+            ) as resp:
+                resp.raise_for_status()
+                for raw in resp.iter_lines():
+                    if not raw:
+                        continue
+                    line = raw.decode("utf-8", errors="replace")
+                    if line.startswith("data: "):
+                        try:
+                            yield _json.loads(line[6:])
+                        except _json.JSONDecodeError:
+                            continue
+        except requests.exceptions.ConnectionError:
+            st.error(f"❌ Cannot connect to backend at {self.base_url}")
+            st.info(
+                "Make sure the FastAPI server is running: `uvicorn backend.main:app --reload`"
+            )
+        except requests.exceptions.Timeout:
+            st.error(f"⏱️ Request timed out after {self.timeout}s")
+        except requests.exceptions.HTTPError as e:
+            st.error(f"❌ API Error: {e.response.status_code} - {e.response.text}")
 
     # Cache Management
     @staticmethod
