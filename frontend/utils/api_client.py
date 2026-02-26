@@ -16,7 +16,7 @@ class APIClient:
 
     def __init__(self, base_url: str = "http://localhost:8080"):
         self.base_url = base_url
-        self.timeout = 30
+        self.timeout = 120
 
     def _request(
         self, method: str, endpoint: str, **kwargs
@@ -46,19 +46,16 @@ class APIClient:
         response = self._request("GET", "/api/health")
         return response.json()
 
-    # Invoice Upload & Processing
-    @st.cache_data(ttl=60)
-    def upload_invoice(_self, file_path: Path) -> Dict[str, Any]:
-        """Upload and process an invoice PDF using LangGraph workflow."""
-        with open(file_path, "rb") as f:
-            files = {"file": (file_path.name, f, "application/pdf")}
-            response = _self._request("POST", "/api/invoices/upload-graph", files=files)
-        return response.json()
-
-    def upload_invoice_stream(self, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """Upload invoice from streamlit file uploader using LangGraph workflow."""
-        files = {"file": (filename, file_content, "application/pdf")}
-        response = self._request("POST", "/api/invoices/upload-graph", files=files)
+    # Document Upload (routes through multi-agent system)
+    def upload_document(
+        self, file_content: bytes, filename: str, message: str = ""
+    ) -> Dict[str, Any]:
+        """Upload a document (invoice/contract/budget) via the chat/upload endpoint."""
+        files = {"files": (filename, file_content)}
+        data = {"message": message} if message else {}
+        response = self._request(
+            "POST", "/api/chat/upload", files=files, data=data, timeout=120
+        )
         return response.json()
 
     # Workflow Management
@@ -156,29 +153,10 @@ class APIClient:
         return response.json()
 
     # Contract Data
-    def upload_contract_stream(self, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """Upload contract PDF for extraction and storage."""
-        files = {"file": (filename, file_content, "application/pdf")}
-        response = self._request("POST", "/api/contracts/upload", files=files)
-        return response.json()
-
     @st.cache_data(ttl=300)
     def get_contract(_self, contract_id: str) -> Dict[str, Any]:
         """Get contract details."""
         response = _self._request("GET", f"/api/contracts/{contract_id}")
-        return response.json()
-
-    # Budget Data
-    def upload_budget_stream(self, file_content: bytes, filename: str) -> Dict[str, Any]:
-        """Upload budget Excel/CSV for extraction and storage."""
-        # Determine content type based on file extension
-        if filename.endswith(".csv"):
-            content_type = "text/csv"
-        else:
-            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-        files = {"file": (filename, file_content, content_type)}
-        response = self._request("POST", "/api/budgets/upload", files=files)
         return response.json()
 
     @st.cache_data(ttl=300)
