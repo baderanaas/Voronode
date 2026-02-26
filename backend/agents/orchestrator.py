@@ -62,6 +62,7 @@ def planner_node(state: ConversationState) -> ConversationState:
         output = planner.analyze(
             user_message=state["user_query"],
             history=state.get("conversation_history", []),
+            memories=state.get("long_term_memories", ""),
         )
 
         state["retry_count"] = 0

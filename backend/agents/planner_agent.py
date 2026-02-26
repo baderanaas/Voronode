@@ -30,7 +30,7 @@ class PlannerAgent:
         """Initialize Planner with Gemini LLM client (Gemini 2.5 Pro for complex planning)."""
         self.llm = GeminiClient()
 
-    def analyze(self, user_message: str, history: List[Dict[str, str]]) -> Dict[str, Any]:
+    def analyze(self, user_message: str, history: List[Dict[str, str]], memories: str = "") -> Dict[str, Any]:
         """
         Analyze user query and decide routing + execution mode.
 
@@ -54,6 +54,7 @@ class PlannerAgent:
             "planner/analyze.j2",
             user_message=user_message,
             history=history,
+            memories=memories,
         )
 
         logger.info("planner_analyzing_query", query=user_message[:100])

@@ -23,6 +23,9 @@ class ConversationState(TypedDict, total=False):
     user_query: str
     """The current user query/message."""
 
+    long_term_memories: str
+    """Relevant facts retrieved from Mem0 (cross-session semantic memory). Empty string if none."""
+
     conversation_history: List[Dict[str, str]]
     """
     Previous conversation turns for context.

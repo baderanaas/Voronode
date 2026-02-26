@@ -3,6 +3,11 @@
 
 Analyze this user query and decide how to handle it.
 
+{% if memories %}
+Long-term Memory (facts extracted from past sessions — use as background context):
+{{ memories }}
+{% endif %}
+
 {% if history %}
 Conversation History (most recent last):
 {% for msg in history[-5:] %}
@@ -12,8 +17,8 @@ Conversation History (most recent last):
 
 IMPORTANT: Before routing to "clarification", resolve any ambiguous pronouns or references
 (e.g. "it", "that", "the contract", "the invoice") using the conversation history above.
-If a prior turn already established which entity is being discussed, treat the query as
-unambiguous and route to "execution_plan".
+If the long-term memory or history already established which entity is being discussed,
+treat the query as unambiguous and route to "execution_plan".
 
 Current User Query: "{{ user_message }}"
 

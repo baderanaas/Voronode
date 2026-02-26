@@ -61,12 +61,6 @@ async def chat(
     memories_text = _mem0.search(
         message or "context", limit=settings.memory_search_limit
     )
-    if memories_text:
-        message = (
-            f"[Relevant context from past conversations:\n{memories_text}]\n\n{message}"
-            if message
-            else memories_text
-        )
 
     try:
         if files:
@@ -180,6 +174,7 @@ async def chat(
         initial_state = {
             "user_query": full_message,
             "conversation_history": history,
+            "long_term_memories": memories_text,
             "retry_count": 0,
             "current_step": 0,
             "completed_steps": [],
@@ -330,13 +325,6 @@ async def chat_stream(
         memories_text = mem0.search(
             message or "context", limit=settings.memory_search_limit
         )
-        enriched_message = message
-        if memories_text:
-            enriched_message = (
-                f"[Relevant context from past conversations:\n{memories_text}]\n\n{message}"
-                if message
-                else memories_text
-            )
 
         def _emit(node_name: str, state_update: dict) -> str:
             event_data = _create_event_data(node_name, state_update)
@@ -477,7 +465,7 @@ async def chat_stream(
                 yield f"data: {complete_event.model_dump_json()}\n\n"
                 return
 
-            effective_message = enriched_message.strip() or prompt_intent
+            effective_message = message.strip() or prompt_intent
             full_message = (
                 f"{effective_message}\n\n[Context — documents just processed: {upload_summary}]"
                 if steps_completed > 0
@@ -490,6 +478,7 @@ async def chat_stream(
             initial_state = {
                 "user_query": full_message,
                 "conversation_history": history,
+                "long_term_memories": memories_text,
                 "retry_count": 0,
                 "current_step": 0,
                 "completed_steps": [],
