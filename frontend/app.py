@@ -31,16 +31,14 @@ api = APIClient()
 for key, default in [
     ("chat_messages", []),
     ("session_id", f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"),
-    ("pending_bytes", None),
-    ("pending_name", None),
-    ("pending_doc_type", None),
+    ("pending_files", []),       # list of {"bytes": b"...", "name": "file.pdf"}
+    ("uploader_key", 0),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-DOC_ICONS = {"invoice": "🧾", "contract": "📄", "budget": "📊"}
 
 
 def render_assistant_message(msg: dict):
@@ -90,67 +88,9 @@ def render_assistant_message(msg: dict):
                 c3.metric("📝 Records", meta["record_count"])
 
 
-def render_upload_result(result: dict, doc_type: str):
-    """Show extracted document data inline after upload."""
-    if doc_type == "invoice":
-        data = result.get("extracted_data", {})
-        status = result.get("status", "unknown")
-        risk = result.get("risk_level", "unknown")
-        anomalies = result.get("anomalies", [])
-
-        icon = "✅" if status == "completed" else "⚠️" if status == "quarantined" else "🔄"
-        st.markdown(f"{icon} **Invoice processed** — status: `{status}` | risk: `{risk}`")
-
-        if data:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Invoice #", data.get("invoice_number", "—"))
-            c2.metric("Amount", f"${float(data.get('total_amount', 0)):,.2f}")
-            c3.metric("Contractor", data.get("contractor_name", "—"))
-
-        if anomalies:
-            st.warning(f"⚠️ {len(anomalies)} anomaly(s) detected")
-            for a in anomalies[:3]:
-                a = a if isinstance(a, dict) else {}
-                st.caption(
-                    f"• **{a.get('type', 'unknown')}** [{a.get('severity', '')}]: "
-                    f"{a.get('message', '')}"
-                )
-
-    elif doc_type == "contract":
-        data = result.get("contract", {})
-        if data:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Contract #", data.get("contract_id", "—"))
-            c2.metric("Value", f"${float(data.get('contract_value', 0)):,.2f}")
-            c3.metric("Retention", f"{float(data.get('retention_rate', 0)) * 100:.1f}%")
-        warnings = result.get("warnings", [])
-        if warnings:
-            st.warning(f"⚠️ {len(warnings)} warning(s): {'; '.join(warnings[:2])}")
-        else:
-            st.success("✅ Contract extracted successfully")
-
-    elif doc_type == "budget":
-        data = result.get("budget", {})
-        if data:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Project", data.get("project_id", "—"))
-            c2.metric("Allocated", f"${float(data.get('total_allocated', 0)):,.2f}")
-            c3.metric("Lines", len(data.get("budget_lines", [])))
-        st.success("✅ Budget loaded successfully")
-
-
-def process_upload(bytes_data: bytes, name: str, doc_type: str) -> tuple[str, dict]:
-    """Upload document via /chat/upload and return (summary_text, result_dict)."""
-    result = api.upload_document(bytes_data, name, message=f"Process this {doc_type}")
-    response_text = result.get("response", "")
-    summary = f"Processed **{name}** ({doc_type})"
-    return summary, result
-
-
 def clear_pending():
-    st.session_state.pending_bytes = None
-    st.session_state.pending_name = None
-    st.session_state.pending_doc_type = None
+    st.session_state.pending_files = []
+    st.session_state.uploader_key += 1  # reset file_uploader widget
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -195,14 +135,13 @@ st.title("💬 Assistant")
 for msg in st.session_state.chat_messages:
     with st.chat_message(msg["role"]):
         if msg["role"] == "user":
-            attachment = msg.get("attachment")
-            if attachment:
-                icon = DOC_ICONS.get(attachment["type"], "📎")
-                st.markdown(
-                    f"<span style='font-size:0.85rem;color:#888;'>"
-                    f"{icon} {attachment['name']}</span>",
-                    unsafe_allow_html=True,
+            attachments = msg.get("attachments", [])
+            if attachments:
+                names_html = " ".join(
+                    f"<span style='font-size:0.85rem;color:#888;'>📎 {n}</span>"
+                    for n in attachments
                 )
+                st.markdown(names_html, unsafe_allow_html=True)
             if msg.get("content"):
                 st.markdown(msg["content"])
         else:
@@ -344,46 +283,32 @@ components.html(
     height=0,
 )
 
-# ── File uploader (compact, always visible, receives drag-drop) ──────────────
-uploaded = st.file_uploader(
+# ── File uploader (multi-file, compact, receives drag-drop) ──────────────────
+uploaded_files = st.file_uploader(
     "Attach",
     type=["pdf", "xlsx", "xls", "csv"],
-    key="file_attach",
+    accept_multiple_files=True,
+    key=f"file_attach_{st.session_state.uploader_key}",
     label_visibility="collapsed",
 )
-if uploaded is not None and st.session_state.pending_name != uploaded.name:
-    ext = Path(uploaded.name).suffix.lower()
-    st.session_state.pending_bytes = uploaded.read()
-    st.session_state.pending_name = uploaded.name
-    st.session_state.pending_doc_type = (
-        "budget" if ext in (".xlsx", ".xls", ".csv") else "invoice"
-    )
-    st.rerun()
+if uploaded_files:
+    existing_names = {f["name"] for f in st.session_state.pending_files}
+    for uf in uploaded_files:
+        if uf.name not in existing_names:
+            st.session_state.pending_files.append(
+                {"bytes": uf.read(), "name": uf.name}
+            )
+    if len(st.session_state.pending_files) > len(existing_names):
+        st.rerun()
 
-# ── Pending file chip + type selector ────────────────────────────────────────
-if st.session_state.pending_bytes:
-    icon = DOC_ICONS.get(st.session_state.pending_doc_type, "📎")
-    ext = Path(st.session_state.pending_name).suffix.lower()
-    if ext == ".pdf":
-        chip_col, type_col, clear_col = st.columns([6, 2, 0.5])
-    else:
-        chip_col, clear_col = st.columns([8, 0.5])
-    chip_col.markdown(
-        f"<div class='pending-chip'>{icon} <b>{st.session_state.pending_name}</b></div>",
-        unsafe_allow_html=True,
+# ── Pending file chips ───────────────────────────────────────────────────────
+if st.session_state.pending_files:
+    names = [f["name"] for f in st.session_state.pending_files]
+    chip_html = " ".join(
+        f"<span class='pending-chip'>📎 <b>{n}</b></span>" for n in names
     )
-    if ext == ".pdf":
-        def _on_type_change():
-            st.session_state.pending_doc_type = st.session_state._type_select
-
-        type_col.selectbox(
-            "Type",
-            ["invoice", "contract"],
-            index=["invoice", "contract"].index(st.session_state.pending_doc_type),
-            key="_type_select",
-            label_visibility="collapsed",
-            on_change=_on_type_change,
-        )
+    chip_col, clear_col = st.columns([8, 0.5])
+    chip_col.markdown(chip_html, unsafe_allow_html=True)
     if clear_col.button("✕", key="remove_pending"):
         clear_pending()
         st.rerun()
@@ -392,20 +317,24 @@ if st.session_state.pending_bytes:
 with st.form("chat_form", clear_on_submit=True, border=False):
     text_col, send_col = st.columns([10, 1])
     with text_col:
-        placeholder = (
-            f"Message — will include {st.session_state.pending_name}"
-            if st.session_state.pending_bytes is not None
-            else "Ask a question about invoices, contracts, budgets, or projects..."
-        )
+        n_files = len(st.session_state.pending_files)
+        if n_files == 1:
+            hint = f"Message — will include {st.session_state.pending_files[0]['name']}"
+        elif n_files > 1:
+            hint = f"Message — will include {n_files} files"
+        else:
+            hint = "Ask a question about invoices, contracts, budgets, or projects..."
         user_text = st.text_input(
             "Message",
-            placeholder=placeholder,
+            placeholder=hint,
             label_visibility="collapsed",
             key="chat_text",
         )
     with send_col:
         submitted = st.form_submit_button("↑")
 
+# Allow submit with text, or with just pending files (no text)
+has_pending = len(st.session_state.pending_files) > 0
 user_input = user_text if submitted and user_text else None
 
 # Sidebar example → chat input
@@ -415,68 +344,39 @@ if "example_query" in st.session_state:
 
 
 # ── Process submission ────────────────────────────────────────────────────────
-if user_input:
-    pending_bytes = st.session_state.pending_bytes
-    pending_name = st.session_state.pending_name
-    pending_doc_type = st.session_state.pending_doc_type
+if user_input or (submitted and has_pending):
+    pending_files = list(st.session_state.pending_files)
     clear_pending()
 
-    user_msg: dict = {"role": "user", "content": user_input}
-    if pending_bytes:
-        user_msg["attachment"] = {"name": pending_name, "type": pending_doc_type}
+    # Display the user turn (attachments + optional text)
+    display_text = user_input or ""
+    user_msg: dict = {"role": "user", "content": display_text}
+    if pending_files:
+        user_msg["attachments"] = [f["name"] for f in pending_files]
     st.session_state.chat_messages.append(user_msg)
 
     with st.chat_message("user"):
-        if pending_bytes:
-            icon = DOC_ICONS.get(pending_doc_type, "📎")
-            st.markdown(
-                f"<span style='font-size:0.85rem;color:#888;'>"
-                f"{icon} {pending_name}</span>",
-                unsafe_allow_html=True,
+        if pending_files:
+            names_html = " ".join(
+                f"<span style='font-size:0.85rem;color:#888;'>📎 {f['name']}</span>"
+                for f in pending_files
             )
-        st.markdown(user_input)
+            st.markdown(names_html, unsafe_allow_html=True)
+        if display_text:
+            st.markdown(display_text)
 
-    # Step 1: upload file if attached
-    upload_context = ""
-    if pending_bytes:
-        with st.chat_message("assistant"):
-            with st.spinner(f"Processing {pending_name}..."):
-                try:
-                    upload_resp = api.upload_document(pending_bytes, pending_name)
-                    upload_text = upload_resp.get("response", "File processed.")
-                    st.markdown(upload_text)
-                    st.session_state.chat_messages.append(
-                        {"role": "assistant", "content": upload_text}
-                    )
-                    # Save context so the chat question knows which document.
-                    # Include the full result so the planner can extract
-                    # identifiers (invoice_number, contract_id, etc.)
-                    # and query Neo4j by the correct property.
-                    upload_context = (
-                        f"[Context: the user just uploaded '{pending_name}'. "
-                        f"Processing result: {upload_text} "
-                        f"To query this document in Neo4j, use its ID or "
-                        f"number (e.g. invoice_number), NOT the filename.]\n\n"
-                    )
-                except Exception as e:
-                    err = f"Failed to process {pending_name}: {e}"
-                    st.error(err)
-                    st.session_state.chat_messages.append(
-                        {"role": "assistant", "content": f"❌ {err}"}
-                    )
-
-    # Step 2: send the user's text question through chat
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        label = f"Processing {len(pending_files)} file(s)..." if pending_files else "Thinking..."
+        with st.spinner(label):
             try:
                 history = [
                     {"role": m["role"], "content": m["content"]}
                     for m in st.session_state.chat_messages[:-1]
                     if m.get("content")
                 ]
-                chat_message = f"{upload_context}{user_input}"
-                response = api.chat(
-                    message=chat_message,
+                response = api.send(
+                    message=user_input or "",
+                    files=pending_files or None,
                     conversation_history=history,
                     session_id=st.session_state.session_id,
                 )

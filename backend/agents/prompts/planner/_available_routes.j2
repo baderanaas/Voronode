@@ -21,11 +21,15 @@ Available Routes:
    - "User uploaded 2 file(s): invoice.pdf → /tmp/tmpABC.pdf, contract.pdf → /tmp/tmpXYZ.pdf"
    - Any message containing "uploaded ... → /tmp/..." patterns
    Response: Steps using InvoiceUploadTool / ContractUploadTool / BudgetUploadTool
-   Note: Classify each file by its name/extension:
-   - Files named *invoice* or *inv_* → InvoiceUploadTool
-   - Files named *contract* or *contr_* → ContractUploadTool
-   - Files named *budget* or *.xlsx or *.csv → BudgetUploadTool
-   - If ambiguous PDF → InvoiceUploadTool (default)
+   Note: Classify each file using the "Content preview" provided with it.
+   Read the preview and decide based on CONTENT, not filename:
+   - Invoice content (invoice number, line items, amounts due, dates, vendor) → InvoiceUploadTool
+   - Contract content (contract terms, parties, retention %, cost codes, scope) → ContractUploadTool
+   - Budget/spreadsheet content (cost codes with allocated/spent amounts, CSV/Excel) → BudgetUploadTool
+   - Prompt/instructions (questions, analysis requests, queries about data) → NOT a document to ingest.
+     Skip this file in upload_plan steps. Include its text in the plan's "intent" field
+     so the user's instructions are carried forward after the other documents are ingested.
+   - If content is ambiguous or unreadable → InvoiceUploadTool (default)
 
    Examples:
    - "show me the data" (which data?)

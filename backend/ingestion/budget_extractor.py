@@ -110,31 +110,53 @@ class BudgetExtractor:
         """
         Extract project metadata from DataFrame.
 
-        Looks for project info in first few rows or uses LLM to infer.
+        Checks dedicated project_id / project_name columns first, then
+        falls back to scanning row values, then falls back to LLM.
         """
         metadata = {}
 
-        # Try to find project ID in first few rows (common pattern)
-        first_rows = df.head(5).astype(str)
+        # Normalise column names for lookup (keep originals for data access)
+        col_lower = {c.lower().strip().replace(" ", "_"): c for c in df.columns}
 
-        for idx, row in first_rows.iterrows():
-            row_text = " ".join(row.values).lower()
+        # 1. Dedicated project_id column
+        for key in ["project_id", "project_number", "proj_id"]:
+            if key in col_lower:
+                val = df[col_lower[key]].dropna().astype(str).iloc[0] if len(df) else ""
+                if val and val != "nan":
+                    metadata["project_id"] = val.strip()
+                    break
 
-            # Look for "project" keyword
-            if "project" in row_text:
-                # Try to extract project ID/name
-                for val in row.values:
-                    val_str = str(val).strip()
-                    if val_str and val_str != "nan" and len(val_str) > 3:
-                        # Potential project identifier
-                        if "prj" in val_str.lower() or "project" in val_str.lower():
-                            metadata["project_name"] = val_str
-                            break
+        # 2. Dedicated project_name column
+        for key in ["project_name", "project", "proj_name"]:
+            if key in col_lower:
+                val = df[col_lower[key]].dropna().astype(str).iloc[0] if len(df) else ""
+                if val and val != "nan":
+                    metadata["project_name"] = val.strip()
+                    break
 
-        # Use LLM to infer project info if not found
-        if not metadata.get("project_name"):
+        # 3. Fallback: scan first 5 row values for project info in cell pairs
+        #    e.g. A="Project Name", B="South Alyssa Tower", C="PRJ-001"
+        if not metadata.get("project_id") or not metadata.get("project_name"):
+            first_rows = df.head(5).astype(str)
+            for _, row in first_rows.iterrows():
+                vals = [str(v).strip() for v in row.values]
+                for i, val in enumerate(vals):
+                    if val == "nan":
+                        continue
+                    val_lower = val.lower()
+                    # PRJ-style code
+                    if not metadata.get("project_id") and "prj" in val_lower:
+                        metadata.setdefault("project_id", val)
+                    # "Project Name" / "Project" label → next cell is the name
+                    if not metadata.get("project_name") and "project" in val_lower:
+                        # The label itself might be the name, or the next cell is
+                        if val_lower not in ("project", "project name", "project_name"):
+                            metadata.setdefault("project_name", val)
+                        elif i + 1 < len(vals) and vals[i + 1] != "nan":
+                            metadata.setdefault("project_name", vals[i + 1])
+
+        if not metadata.get("project_name") and not metadata.get("project_id"):
             logger.warning("project_metadata_not_found_using_llm")
-            # For now, use filename as fallback
             metadata["project_name"] = "Unknown Project"
 
         return metadata
@@ -235,11 +257,22 @@ class BudgetExtractor:
         return budget_lines
 
     def _find_column(self, df: pd.DataFrame, possible_names: List[str]) -> Optional[str]:
-        """Find column name from list of possible names (case-insensitive)."""
+        """Find column name from list of possible names (case-insensitive).
+
+        First tries exact match, then falls back to substring match
+        (e.g. 'allocated_amount' matches 'allocated').
+        """
+        # Exact match first
         for col in df.columns:
             col_normalized = col.lower().strip().replace(" ", "_")
             if col_normalized in possible_names:
                 return col
+        # Substring match: column contains a keyword or keyword contains column
+        for col in df.columns:
+            col_normalized = col.lower().strip().replace(" ", "_")
+            for name in possible_names:
+                if name in col_normalized or col_normalized in name:
+                    return col
         return None
 
     def _validate_with_llm(

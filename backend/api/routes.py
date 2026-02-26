@@ -12,7 +12,6 @@ import structlog
 import json
 
 from backend.agents.orchestrator import create_multi_agent_graph
-from backend.agents.orchestrator import create_multi_agent_graph
 
 
 from backend.api.schemas import (
@@ -513,42 +512,136 @@ async def query_graph(query: dict):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    message: str = Form(""),
+    files: Optional[List[UploadFile]] = File(None),
+    conversation_history: str = Form("[]"),
+    session_id: Optional[str] = Form(None),
+):
     """
-    Conversational AI endpoint using multi-agent system.
+    Unified conversational AI endpoint — accepts optional file uploads alongside
+    an optional text message.
 
-    Pipeline:
-    1. Planner analyzes query and routes (generic_response, execution_plan, clarification)
-    2. If execution_plan, Executor runs tools in one_way or react mode
-    3. Validator checks response quality (retry loop if needed)
-    4. Responder formats response with markdown
+    When files are present:
+      1. Files are saved to temp, previews extracted, and the upload graph runs.
+      2. If no message, the upload summary is returned immediately.
+      3. If a message is also present, its combined with the upload summary and
+         the chat graph runs once, returning one answer.
+
+    Pipeline (message path):
+    Planner → Executor (tools) → Validator → Responder
 
     Args:
-        request: User message and conversation history
+        message: User message text (Form, optional)
+        files: One or more uploaded files (File, optional)
+        conversation_history: JSON-encoded list of {role, content} dicts (Form)
+        session_id: Session ID for conversation persistence (Form, optional)
 
     Returns:
-        Formatted response with display format and data
+        Formatted ChatResponse with response text, display format, and data
     """
     start_time = time.time()
 
-    logger.info("chat_request_received", message=request.message[:100])
+    temp_paths = []
+    upload_summary = ""
 
     try:
-        # Import orchestrator
-        from backend.agents.orchestrator import create_multi_agent_graph
+        # ── Step 1: Process uploaded files ──────────────────────────────────
+        if files:
+            logger.info("chat_upload_request_received", file_count=len(files))
 
-        # Initialize multi-agent graph
+            file_descriptions = []
+            for uploaded_file in files:
+                suffix = Path(uploaded_file.filename).suffix or ".tmp"
+
+                content = await uploaded_file.read()
+                if len(content) > settings.api_upload_max_size:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File '{uploaded_file.filename}' too large. "
+                        f"Maximum size: {settings.api_upload_max_size} bytes",
+                    )
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+
+                temp_paths.append(tmp_path)
+                file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
+                logger.info(
+                    "chat_upload_temp_saved",
+                    filename=uploaded_file.filename,
+                    path=tmp_path,
+                )
+
+            # Extract content previews for planner classification
+            file_previews = []
+            for desc, tmp_path in zip(file_descriptions, temp_paths):
+                preview = _extract_file_preview(tmp_path)
+                if preview:
+                    file_previews.append(f"{desc}\n  Content preview: {preview}")
+                else:
+                    file_previews.append(desc)
+
+            file_list_str = "\n".join(file_previews)
+            count = len(files)
+            upload_message = (
+                f"User uploaded {count} file(s):\n{file_list_str}\n\n"
+                "Please identify and process each document."
+            )
+
+            graph = create_multi_agent_graph()
+            upload_state = {
+                "user_query": upload_message,
+                "conversation_history": [],
+                "retry_count": 0,
+                "current_step": 0,
+                "completed_steps": [],
+                "react_max_steps": 5,
+            }
+            config = {"configurable": {"thread_id": session_id or "upload_default"}}
+            final_upload_state = graph.invoke(upload_state, config)
+            upload_summary = final_upload_state.get("final_response", "")
+
+            # Files only — return upload result immediately, no second graph call
+            if not message.strip():
+                metadata = {
+                    "processing_time_seconds": round(time.time() - start_time, 2),
+                    "file_count": count,
+                    "retry_count": final_upload_state.get("retry_count", 0),
+                }
+                logger.info(
+                    "chat_upload_complete",
+                    processing_time=metadata["processing_time_seconds"],
+                )
+                return ChatResponse(
+                    response=upload_summary,
+                    display_format=final_upload_state.get("display_format", "text"),
+                    display_data=final_upload_state.get("display_data"),
+                    route=final_upload_state.get("route", "unknown"),
+                    execution_mode="upload",
+                    metadata=metadata,
+                    session_id=session_id,
+                )
+
+        # ── Step 2: Process chat message ─────────────────────────────────────
+        try:
+            history = json.loads(conversation_history)
+        except json.JSONDecodeError:
+            history = []
+
+        # Combine upload summary with user message when both are present
+        full_message = (
+            f"[Upload result: {upload_summary}]\n\n{message}"
+            if upload_summary
+            else message
+        )
+
+        logger.info("chat_request_received", message=full_message[:100])
+
         graph = create_multi_agent_graph()
-
-        # Convert conversation history to state format
-        history = [
-            {"role": msg.role, "content": msg.content}
-            for msg in request.conversation_history
-        ]
-
-        # Create initial state
         initial_state = {
-            "user_query": request.message,
+            "user_query": full_message,
             "conversation_history": history,
             "retry_count": 0,
             "current_step": 0,
@@ -556,18 +649,15 @@ async def chat(request: ChatRequest):
             "react_max_steps": 5,
         }
 
-        # Execute graph
-        config = {"configurable": {"thread_id": request.session_id or "default"}}
+        config = {"configurable": {"thread_id": session_id or "default"}}
         final_state = graph.invoke(initial_state, config)
 
-        # Extract response
         response_text = final_state.get("final_response", "")
         display_format = final_state.get("display_format", "text")
         display_data = final_state.get("display_data")
         route = final_state.get("route", "unknown")
         execution_mode = final_state.get("execution_mode")
 
-        # Build metadata
         metadata = {
             "processing_time_seconds": round(time.time() - start_time, 2),
             "retry_count": final_state.get("retry_count", 0),
@@ -588,13 +678,14 @@ async def chat(request: ChatRequest):
             route=route,
             execution_mode=execution_mode,
             metadata=metadata,
-            session_id=request.session_id,
+            session_id=session_id,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("chat_request_failed", error=str(e), message=request.message[:100])
+        logger.error("chat_request_failed", error=str(e))
 
-        # Return friendly error response
         return ChatResponse(
             response=f"I encountered an error while processing your request: {str(e)}",
             display_format="text",
@@ -605,8 +696,19 @@ async def chat(request: ChatRequest):
                 "error": str(e),
                 "processing_time_seconds": round(time.time() - start_time, 2),
             },
-            session_id=request.session_id,
+            session_id=session_id,
         )
+    finally:
+        for tmp_path in temp_paths:
+            try:
+                p = Path(tmp_path)
+                if p.exists():
+                    p.unlink()
+                    logger.debug("chat_temp_cleaned", path=tmp_path)
+            except Exception as cleanup_err:
+                logger.warning(
+                    "chat_cleanup_failed", path=tmp_path, error=str(cleanup_err)
+                )
 
 
 @router.post("/chat/stream")
@@ -834,132 +936,40 @@ def _create_event_data(
     return None
 
 
-@router.post("/chat/upload", response_model=ChatResponse)
-async def chat_upload(
-    files: List[UploadFile] = File(...),
-    message: str = Form(""),
-    session_id: str = Form(None),
-):
-    """
-    Multi-file upload endpoint that routes through the multi-agent system.
-
-    The planner classifies each file (invoice/contract/budget) and emits an
-    upload_plan. The UploadAgent processes all files, then the Validator and
-    Responder format the result.
-
-    Args:
-        files: One or more uploaded files (PDF, xlsx, csv)
-        message: Optional user instruction
-        session_id: Optional session ID for conversation persistence
-
-    Returns:
-        ChatResponse with processing summary
-    """
-    start_time = time.time()
-
-    logger.info("chat_upload_request_received", file_count=len(files))
-
-    temp_paths = []
-
+def _extract_file_preview(file_path: str, max_chars: int = 500) -> str:
+    """Extract a short text preview from a file for content-based classification."""
     try:
-        # Save each file to a named temp file
-        file_descriptions = []
-        for uploaded_file in files:
-            suffix = Path(uploaded_file.filename).suffix or ".tmp"
+        path = Path(file_path)
+        suffix = path.suffix.lower()
 
-            # Validate file size
-            content = await uploaded_file.read()
-            if len(content) > settings.api_upload_max_size:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File '{uploaded_file.filename}' too large. "
-                    f"Maximum size: {settings.api_upload_max_size} bytes",
-                )
+        if suffix == ".pdf":
+            import pdfplumber
+            with pdfplumber.open(file_path) as pdf:
+                text = ""
+                for page in pdf.pages[:2]:  # First 2 pages max
+                    page_text = page.extract_text() or ""
+                    text += page_text + "\n"
+                    if len(text) >= max_chars:
+                        break
+                return text[:max_chars].strip()
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
+        elif suffix == ".csv":
+            # Read first few lines
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = []
+                for i, line in enumerate(f):
+                    if i >= 5:
+                        break
+                    lines.append(line.rstrip())
+                return "\n".join(lines)[:max_chars]
 
-            temp_paths.append(tmp_path)
-            file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
-            logger.info(
-                "chat_upload_temp_saved", filename=uploaded_file.filename, path=tmp_path
-            )
+        elif suffix in (".xlsx", ".xls"):
+            import pandas as pd
+            df = pd.read_excel(file_path, nrows=5)
+            return f"Columns: {', '.join(df.columns)}\n{df.head(3).to_string()}"[:max_chars]
 
-        # Build the initial message for the planner
-        file_list_str = "\n".join(file_descriptions)
-        count = len(files)
-        initial_message = f"User uploaded {count} file(s):\n{file_list_str}\n"
-        if message.strip():
-            initial_message += f"\n{message.strip()}\n"
-        initial_message += "\nPlease identify and process each document."
-
-        graph = create_multi_agent_graph()
-
-        initial_state = {
-            "user_query": initial_message,
-            "conversation_history": [],
-            "retry_count": 0,
-            "current_step": 0,
-            "completed_steps": [],
-            "react_max_steps": 5,
-        }
-
-        config = {"configurable": {"thread_id": session_id or "upload_default"}}
-        final_state = graph.invoke(initial_state, config)
-
-        response_text = final_state.get("final_response", "")
-        display_format = final_state.get("display_format", "text")
-        display_data = final_state.get("display_data")
-        route = final_state.get("route", "unknown")
-
-        metadata = {
-            "processing_time_seconds": round(time.time() - start_time, 2),
-            "file_count": count,
-            "retry_count": final_state.get("retry_count", 0),
-        }
-
-        logger.info(
-            "chat_upload_complete",
-            route=route,
-            processing_time=metadata["processing_time_seconds"],
-        )
-
-        return ChatResponse(
-            response=response_text,
-            display_format=display_format,
-            display_data=display_data,
-            route=route,
-            execution_mode="upload",
-            metadata=metadata,
-            session_id=session_id,
-        )
-
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("chat_upload_failed", error=str(e))
-        return ChatResponse(
-            response=f"I encountered an error while processing your files: {str(e)}",
-            display_format="text",
-            display_data=None,
-            route="generic_response",
-            execution_mode=None,
-            metadata={
-                "error": str(e),
-                "processing_time_seconds": round(time.time() - start_time, 2),
-            },
-            session_id=session_id,
-        )
-    finally:
-        # Clean up any temp files not already deleted by tools
-        for tmp_path in temp_paths:
-            try:
-                p = Path(tmp_path)
-                if p.exists():
-                    p.unlink()
-                    logger.debug("chat_upload_temp_cleaned", path=tmp_path)
-            except Exception as cleanup_err:
-                logger.warning(
-                    "chat_upload_cleanup_failed", path=tmp_path, error=str(cleanup_err)
-                )
+        logger.warning("file_preview_extraction_failed", path=file_path, error=str(e))
+    return ""
+
+
