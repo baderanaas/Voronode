@@ -17,13 +17,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from io import BytesIO
 
-from backend.agents.budget_extractor import BudgetExtractor
+from backend.ingestion.budget_extractor import BudgetExtractor
 
 
 @pytest.fixture
 def budget_extractor():
     """Create BudgetExtractor with mocked GroqClient."""
-    with patch("backend.agents.budget_extractor.GroqClient") as mock_groq_cls:
+    with patch("backend.ingestion.budget_extractor.GroqClient") as mock_groq_cls:
         mock_groq = Mock()
         mock_groq_cls.return_value = mock_groq
         extractor = BudgetExtractor()

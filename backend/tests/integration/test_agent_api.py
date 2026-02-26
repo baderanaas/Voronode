@@ -12,7 +12,7 @@ import json
 API_URL = "http://localhost:8000/api/chat"
 
 
-def test_chat(query: str, session_id: str = "test-session"):
+def run_chat(query: str, session_id: str = "test-session"):
     """Send a chat query to the API."""
     print(f"\n{'='*60}")
     print(f"Query: {query}")
@@ -65,7 +65,7 @@ def main():
     ]
 
     for query in test_cases:
-        test_chat(query)
+        run_chat(query)
 
     print("\n" + "="*60)
     print("[SUCCESS] All tests completed!")

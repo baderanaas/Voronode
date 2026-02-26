@@ -10,12 +10,12 @@ from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from backend.agents.multi_agent.state import ConversationState
-from backend.agents.multi_agent.planner_agent import PlannerAgent
-from backend.agents.multi_agent.executor_agent import ExecutorAgent
-from backend.agents.multi_agent.upload_agent import UploadAgent
-from backend.agents.multi_agent.validator_agent import ValidatorAgent
-from backend.agents.multi_agent.responder_agent import ResponderAgent
+from backend.agents.state import ConversationState
+from backend.agents.planner_agent import PlannerAgent
+from backend.agents.executor_agent import ExecutorAgent
+from backend.agents.upload_agent import UploadAgent
+from backend.agents.validator_agent import ValidatorAgent
+from backend.agents.responder_agent import ResponderAgent
 
 logger = structlog.get_logger()
 

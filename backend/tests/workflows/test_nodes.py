@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from backend.workflows.nodes import (
+from backend.ingestion.pipeline.nodes import (
     extract_text_node,
     structure_invoice_node,
     validate_invoice_node,
@@ -43,7 +43,7 @@ def test_extract_text_node_success():
         "extraction_confidence": None,
     }
 
-    with patch("backend.workflows.nodes.InvoiceExtractor") as mock_extractor:
+    with patch("backend.ingestion.pipeline.nodes.InvoiceExtractor") as mock_extractor:
         mock_instance = Mock()
         mock_instance.extract_text_from_pdf.return_value = "Sample invoice text"
         mock_extractor.return_value = mock_instance
@@ -80,7 +80,7 @@ def test_extract_text_node_failure():
         "extraction_confidence": None,
     }
 
-    with patch("backend.workflows.nodes.InvoiceExtractor") as mock_extractor:
+    with patch("backend.ingestion.pipeline.nodes.InvoiceExtractor") as mock_extractor:
         mock_instance = Mock()
         mock_instance.extract_text_from_pdf.side_effect = ValueError("File not found")
         mock_extractor.return_value = mock_instance

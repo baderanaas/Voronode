@@ -9,7 +9,7 @@ import structlog
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from backend.agents.compliance_auditor import ContractComplianceAuditor
+from backend.ingestion.compliance_auditor import ContractComplianceAuditor
 from backend.graph.client import Neo4jClient
 from backend.services.graph_builder import GraphBuilder
 from backend.core.models import Invoice, LineItem

@@ -3,10 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False
-    )
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     # LLM
     groq_api_key: str
@@ -19,7 +16,7 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_embedding_model: str = "text-embedding-3-small"
 
-    # Multi-Agent Chat (Phase 7)
+    # Multi-Agent Chat
     openai_chat_model: str = "gpt-4o-mini"  # For conversational agents
 
     # Gemini (for Planner agent)
@@ -30,7 +27,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str
     anthropic_model: str = "claude-haiku-4-5-20251001"  # For Cypher query generation
 
-    # Web Search (Phase 7)
+    # Web Search
     tavily_api_key: Optional[str] = None  # Optional for WebSearchTool
 
     # Neo4j
@@ -49,19 +46,19 @@ class Settings(BaseSettings):
     # API
     api_upload_max_size: int = 10 * 1024 * 1024  # 10MB
 
-    # Workflow configuration (Phase 3)
+    # Workflow configuration
     workflow_max_retries: int = 3
     workflow_checkpoint_db: str = "workflow_checkpoints.db"
     workflow_state_db: str = "workflow_states.db"
     workflow_quarantine_high_risk: bool = True
 
-    # Compliance Auditor (Phase 4B)
+    # Compliance Auditor
     enable_compliance_audit: bool = True
-    compliance_price_tolerance_percent: float = 0.05  # 5% tolerance for unit prices
-    compliance_retention_tolerance_percent: float = 0.01  # 1% tolerance for retention
-    compliance_quarantine_on_violation: bool = True  # Quarantine invoices with compliance violations
-    compliance_critical_threshold: int = 1  # Number of critical violations to trigger quarantine
-    compliance_high_threshold: int = 2  # Number of high violations to trigger quarantine
+    compliance_price_tolerance_percent: float = 0.05
+    compliance_retention_tolerance_percent: float = 0.01
+    compliance_quarantine_on_violation: bool = True
+    compliance_critical_threshold: int = 1
+    compliance_high_threshold: int = 2
 
     # General
     log_level: str = "INFO"

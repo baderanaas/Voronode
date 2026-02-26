@@ -32,19 +32,19 @@ class UploadAgent:
     def _initialize_tools(self):
         """Load the three upload tools."""
         try:
-            from backend.tools.invoice_upload_tool import InvoiceUploadTool
+            from backend.agents.tools.invoice_upload_tool import InvoiceUploadTool
             self.tools["InvoiceUploadTool"] = InvoiceUploadTool()
         except ImportError:
             logger.warning("InvoiceUploadTool not available")
 
         try:
-            from backend.tools.contract_upload_tool import ContractUploadTool
+            from backend.agents.tools.contract_upload_tool import ContractUploadTool
             self.tools["ContractUploadTool"] = ContractUploadTool()
         except ImportError:
             logger.warning("ContractUploadTool not available")
 
         try:
-            from backend.tools.budget_upload_tool import BudgetUploadTool
+            from backend.agents.tools.budget_upload_tool import BudgetUploadTool
             self.tools["BudgetUploadTool"] = BudgetUploadTool()
         except ImportError:
             logger.warning("BudgetUploadTool not available")

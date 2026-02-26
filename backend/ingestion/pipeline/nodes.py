@@ -8,9 +8,9 @@ import structlog
 from backend.core.state import WorkflowState
 from backend.core.models import Invoice, LineItem
 from backend.core.config import settings
-from backend.agents.extractor import InvoiceExtractor
-from backend.agents.validator import InvoiceValidator
-from backend.agents.compliance_auditor import ContractComplianceAuditor
+from backend.ingestion.extractor import InvoiceExtractor
+from backend.ingestion.validator import InvoiceValidator
+from backend.ingestion.compliance_auditor import ContractComplianceAuditor
 from backend.services.graph_builder import GraphBuilder
 from backend.services.llm_client import GroqClient
 from backend.vector.client import ChromaDBClient

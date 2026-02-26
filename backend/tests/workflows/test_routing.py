@@ -2,7 +2,7 @@
 
 import pytest
 
-from backend.workflows.routing import (
+from backend.ingestion.pipeline.routing import (
     check_for_critical_failure,
     should_retry_extraction,
     route_by_validation_severity,

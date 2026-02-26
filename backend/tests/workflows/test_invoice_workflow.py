@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-from backend.workflows.invoice_workflow import (
+from backend.ingestion.pipeline.invoice_workflow import (
     create_invoice_workflow_graph,
     compile_workflow_with_checkpoints,
 )
@@ -78,25 +78,26 @@ def test_create_workflow_graph():
     assert "error_handler" in nodes
 
 
-@patch("backend.workflows.invoice_workflow.SqliteSaver")
-def test_compile_workflow_with_checkpoints(mock_saver):
+@patch("backend.ingestion.pipeline.invoice_workflow.sqlite3")
+@patch("backend.ingestion.pipeline.invoice_workflow.SqliteSaver")
+def test_compile_workflow_with_checkpoints(mock_saver, mock_sqlite):
     """Test workflow compilation with checkpointing."""
-    from langgraph.checkpoint.base import BaseCheckpointSaver
+    from langgraph.checkpoint.memory import MemorySaver
 
-    # Create a proper mock that inherits from BaseCheckpointSaver
-    mock_checkpointer = MagicMock(spec=BaseCheckpointSaver)
-    mock_saver.from_conn_string.return_value = mock_checkpointer
+    # The code calls SqliteSaver(conn) directly (constructor, not from_conn_string)
+    # Return a real BaseCheckpointSaver subclass so LangGraph's isinstance check passes
+    mock_saver.return_value = MemorySaver()
 
     workflow = compile_workflow_with_checkpoints("test_checkpoints.db")
 
     assert workflow is not None
-    mock_saver.from_conn_string.assert_called_once_with("test_checkpoints.db")
+    mock_saver.assert_called_once()  # Verifies SqliteSaver was instantiated
 
 
-@patch("backend.workflows.nodes.InvoiceExtractor")
-@patch("backend.workflows.nodes.InvoiceValidator")
-@patch("backend.workflows.nodes.GraphBuilder")
-@patch("backend.workflows.nodes.ChromaDBClient")
+@patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
+@patch("backend.ingestion.pipeline.nodes.InvoiceValidator")
+@patch("backend.ingestion.pipeline.nodes.GraphBuilder")
+@patch("backend.ingestion.pipeline.nodes.ChromaDBClient")
 def test_clean_invoice_workflow(
     mock_chroma, mock_graph, mock_validator, mock_extractor, mock_invoice_data
 ):
@@ -131,8 +132,8 @@ def test_clean_invoice_workflow(
     assert mock_validator_instance.validate_invoice(Mock()) == []
 
 
-@patch("backend.workflows.nodes.InvoiceExtractor")
-@patch("backend.workflows.nodes.InvoiceValidator")
+@patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
+@patch("backend.ingestion.pipeline.nodes.InvoiceValidator")
 def test_high_risk_quarantine_workflow(mock_validator, mock_extractor, mock_invoice_data):
     """
     Test workflow with high-risk invoice gets quarantined.
@@ -167,7 +168,7 @@ def test_high_risk_quarantine_workflow(mock_validator, mock_extractor, mock_invo
     assert all(a.severity == "high" for a in anomalies)
 
 
-@patch("backend.workflows.nodes.InvoiceExtractor")
+@patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
 def test_extraction_retry_with_critic(mock_extractor):
     """
     Test workflow retries extraction with critic feedback.

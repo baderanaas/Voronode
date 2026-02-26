@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import structlog
 
-from backend.workflows.invoice_workflow import compile_workflow_with_checkpoints
+from backend.ingestion.pipeline.invoice_workflow import compile_workflow_with_checkpoints
 from backend.storage.workflow_store import WorkflowStore
 from backend.core.config import settings
 

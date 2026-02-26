@@ -11,13 +11,13 @@ Tests:
 import pytest
 from unittest.mock import Mock, patch
 
-from backend.agents.multi_agent.planner_agent import PlannerAgent
+from backend.agents.planner_agent import PlannerAgent
 
 
 @pytest.fixture
 def planner_agent():
     """Create PlannerAgent with mocked GeminiClient."""
-    with patch("backend.agents.multi_agent.planner_agent.GeminiClient") as mock_gemini_cls:
+    with patch("backend.agents.planner_agent.GeminiClient") as mock_gemini_cls:
         mock_gemini = Mock()
         mock_gemini_cls.return_value = mock_gemini
         agent = PlannerAgent()

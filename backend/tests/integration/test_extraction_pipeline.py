@@ -12,8 +12,8 @@ from pathlib import Path
 from decimal import Decimal
 from datetime import date
 
-from backend.agents.extractor import InvoiceExtractor
-from backend.agents.validator import InvoiceValidator
+from backend.ingestion.extractor import InvoiceExtractor
+from backend.ingestion.validator import InvoiceValidator
 from backend.services.graph_builder import GraphBuilder
 from backend.vector.client import ChromaDBClient
 from backend.graph.client import Neo4jClient
@@ -93,6 +93,11 @@ class TestExtractionPipeline:
         self, extractor, validator, graph_builder, sample_invoice_pdf
     ):
         """Test end-to-end extraction pipeline."""
+        # Clean up any previously accumulated test data for this invoice
+        graph_builder.neo4j_client.run_query(
+            "MATCH (i:Invoice {invoice_number: 'INV-2024-0001'}) DETACH DELETE i"
+        )
+
         # Step 1: Extract
         invoice = extractor.extract_invoice_from_pdf(sample_invoice_pdf)
 

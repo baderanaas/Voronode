@@ -74,7 +74,7 @@ class BudgetUploadTool:
         path = Path(file_path)
         try:
             # --- Step 1: Extract and validate ---
-            from backend.agents.budget_extractor import BudgetExtractor
+            from backend.ingestion.budget_extractor import BudgetExtractor
             extractor = BudgetExtractor()
             budget_data = extractor.extract_and_validate(path)
 

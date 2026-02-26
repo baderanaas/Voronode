@@ -3,13 +3,17 @@
 import time
 import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 import structlog
 import json
+
+from backend.agents.orchestrator import create_multi_agent_graph
+from backend.agents.orchestrator import create_multi_agent_graph
+
 
 from backend.api.schemas import (
     InvoiceUploadResponse,
@@ -61,7 +65,7 @@ async def health_check():
     logger.info("health_check", status=overall_status, services=services_status)
 
     return HealthResponse(
-        status=overall_status, services=services_status, timestamp=datetime.utcnow()
+        status=overall_status, services=services_status, timestamp=datetime.now(timezone.utc)
     )
 
 
@@ -201,7 +205,9 @@ async def get_workflow_status(document_id: str):
         raise
     except Exception as e:
         logger.error("workflow_status_failed", document_id=document_id, error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get workflow status: {e}"
+        )
 
 
 @router.get("/workflows")
@@ -529,7 +535,7 @@ async def chat(request: ChatRequest):
 
     try:
         # Import orchestrator
-        from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+        from backend.agents.orchestrator import create_multi_agent_graph
 
         # Initialize multi-agent graph
         graph = create_multi_agent_graph()
@@ -634,9 +640,6 @@ async def chat_stream(request: ChatRequest):
         logger.info("chat_stream_request_received", message=request.message[:100])
 
         try:
-            # Import orchestrator
-            from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
-
             # Initialize multi-agent graph
             graph = create_multi_agent_graph()
 
@@ -661,9 +664,6 @@ async def chat_stream(request: ChatRequest):
 
             # Stream state updates
             for chunk in graph.stream(initial_state, config):
-                # chunk is a dict with node name as key and state update as value
-                # Example: {"planner": {...state updates...}}
-
                 node_name = list(chunk.keys())[0]
                 state_update = chunk[node_name]
 
@@ -674,7 +674,7 @@ async def chat_stream(request: ChatRequest):
                     event = ChatStreamEvent(
                         event=node_name,
                         data=event_data,
-                        timestamp=datetime.utcnow(),
+                        timestamp=datetime.now(timezone.utc),
                     )
 
                     # Yield SSE format: data: {json}\n\n
@@ -695,7 +695,7 @@ async def chat_stream(request: ChatRequest):
                     "message": "Processing complete",
                     "processing_time_seconds": round(processing_time, 2),
                 },
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             yield f"data: {complete_event.model_dump_json()}\n\n"
@@ -720,7 +720,7 @@ async def chat_stream(request: ChatRequest):
                     "error": str(e),
                     "message": f"I encountered an error while processing your request: {str(e)}",
                 },
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
             )
 
             yield f"data: {error_event.model_dump_json()}\n\n"
@@ -779,7 +779,9 @@ def _create_event_data(
             latest_step = completed_steps[-1] if completed_steps else {}
 
             # Determine status from latest step
-            step_status = latest_step.get("status", "unknown") if latest_step else "unknown"
+            step_status = (
+                latest_step.get("status", "unknown") if latest_step else "unknown"
+            )
 
             return {
                 "stage": "execution",
@@ -871,7 +873,7 @@ async def chat_upload(
                 raise HTTPException(
                     status_code=413,
                     detail=f"File '{uploaded_file.filename}' too large. "
-                           f"Maximum size: {settings.api_upload_max_size} bytes",
+                    f"Maximum size: {settings.api_upload_max_size} bytes",
                 )
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -880,20 +882,17 @@ async def chat_upload(
 
             temp_paths.append(tmp_path)
             file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
-            logger.info("chat_upload_temp_saved", filename=uploaded_file.filename, path=tmp_path)
+            logger.info(
+                "chat_upload_temp_saved", filename=uploaded_file.filename, path=tmp_path
+            )
 
         # Build the initial message for the planner
         file_list_str = "\n".join(file_descriptions)
         count = len(files)
-        initial_message = (
-            f"User uploaded {count} file(s):\n{file_list_str}\n"
-        )
+        initial_message = f"User uploaded {count} file(s):\n{file_list_str}\n"
         if message.strip():
             initial_message += f"\n{message.strip()}\n"
         initial_message += "\nPlease identify and process each document."
-
-        # Import and run orchestrator
-        from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
 
         graph = create_multi_agent_graph()
 
@@ -961,4 +960,6 @@ async def chat_upload(
                     p.unlink()
                     logger.debug("chat_upload_temp_cleaned", path=tmp_path)
             except Exception as cleanup_err:
-                logger.warning("chat_upload_cleanup_failed", path=tmp_path, error=str(cleanup_err))
+                logger.warning(
+                    "chat_upload_cleanup_failed", path=tmp_path, error=str(cleanup_err)
+                )

@@ -11,7 +11,7 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, project_root)
 
-from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+from backend.agents.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
@@ -81,7 +81,7 @@ COMPLEX_QUERIES = [
 ]
 
 
-def test_query(query_info: dict, graph):
+def run_query(query_info: dict, graph):
     """Test a single complex query."""
     print("\n" + "=" * 70)
     print(f"Test: {query_info['name']}")
@@ -145,7 +145,7 @@ def main():
     # Run tests
     results = []
     for query_info in COMPLEX_QUERIES:
-        success = test_query(query_info, graph)
+        success = run_query(query_info, graph)
         results.append((query_info['name'], success))
 
     # Summary
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     if args.query:
         # Single query test
         graph = create_multi_agent_graph()
-        test_query({"name": "Custom", "query": args.query, "expected_mode": "unknown", "tests": []}, graph)
+        run_query({"name": "Custom", "query": args.query, "expected_mode": "unknown", "tests": []}, graph)
     else:
         # Run all tests
         main()

@@ -13,7 +13,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import time
 
-from backend.agents.multi_agent.executor_agent import ExecutorAgent
+from backend.agents.executor_agent import ExecutorAgent
 
 
 @pytest.fixture

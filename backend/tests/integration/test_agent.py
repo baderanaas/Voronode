@@ -11,13 +11,13 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, project_root)
 
-from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+from backend.agents.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
 
-def test_query(query: str, thread_id: str = "test"):
+def run_query(query: str, thread_id: str = "test"):
     """Test a single query through the orchestrator."""
     print(f"\n{'='*60}")
     print(f"Query: {query}")
@@ -76,7 +76,7 @@ def main():
 
     for query in test_cases:
         try:
-            test_query(query)
+            run_query(query)
         except Exception as e:
             print(f"\n[ERROR] Error: {e}")
             import traceback

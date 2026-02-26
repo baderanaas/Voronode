@@ -74,12 +74,12 @@ class InvoiceUploadTool:
         path = Path(file_path)
         try:
             # --- Step 1: Extract ---
-            from backend.agents.extractor import InvoiceExtractor
+            from backend.ingestion.extractor import InvoiceExtractor
             extractor = InvoiceExtractor()
             invoice = extractor.extract_invoice_from_pdf(path)
 
             # --- Step 2: Validate ---
-            from backend.agents.validator import InvoiceValidator
+            from backend.ingestion.validator import InvoiceValidator
             validator = InvoiceValidator()
             anomalies = validator.validate_invoice(invoice)
 

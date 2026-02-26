@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 
@@ -133,7 +133,7 @@ class ComplianceAnomaly(BaseModel):
     contract_clause: Optional[str] = Field(None, description="Specific contract clause violated")
     expected: Optional[Any] = Field(None, description="Expected value based on contract terms")
     actual: Optional[Any] = Field(None, description="Actual value from invoice")
-    detected_at: datetime = Field(default_factory=datetime.utcnow)
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Additional context
     invoice_id: Optional[str] = None

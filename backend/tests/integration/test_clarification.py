@@ -9,13 +9,13 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, project_root)
 
-from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+from backend.agents.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
 
-def test_query(query: str, description: str):
+def run_query(query: str, description: str):
     """Test a query and show the route and response."""
     print(f"\n{'='*60}")
     print(f"{description}")
@@ -57,7 +57,7 @@ def main():
     results = []
     for query, description in test_cases:
         try:
-            route, response = test_query(query, description)
+            route, response = run_query(query, description)
             results.append((description, route, response))
         except Exception as e:
             print(f"[ERROR] Error: {e}")

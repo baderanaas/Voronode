@@ -9,57 +9,63 @@ import os
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 sys.path.insert(0, project_root)
 
-from backend.agents.multi_agent.orchestrator import create_multi_agent_graph
+from backend.agents.orchestrator import create_multi_agent_graph
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding='utf-8')
 
-print("=" * 60)
-print("Testing CONTRACT-001 Invoice Compliance Check")
-print("=" * 60)
 
-query = "Can you check if the invoices match the specifications made in CONTRACT-001?"
+def main():
+    print("=" * 60)
+    print("Testing CONTRACT-001 Invoice Compliance Check")
+    print("=" * 60)
 
-print(f"\nQuery: {query}\n")
+    query = "Can you check if the invoices match the specifications made in CONTRACT-001?"
 
-try:
-    graph = create_multi_agent_graph()
+    print(f"\nQuery: {query}\n")
 
-    initial_state = {
-        "user_query": query,
-        "conversation_history": [],
-        "retry_count": 0,
-    }
+    try:
+        graph = create_multi_agent_graph()
 
-    config = {"configurable": {"thread_id": "test-contract"}}
+        initial_state = {
+            "user_query": query,
+            "conversation_history": [],
+            "retry_count": 0,
+        }
 
-    print("Executing query through multi-agent system...")
-    print("-" * 60)
+        config = {"configurable": {"thread_id": "test-contract"}}
 
-    final_state = graph.invoke(initial_state, config)
+        print("Executing query through multi-agent system...")
+        print("-" * 60)
 
-    print(f"\n📍 Route: {final_state.get('route')}")
-    print(f"[Mode]  Execution Mode: {final_state.get('execution_mode')}")
-    print(f"🔄 Retries: {final_state.get('retry_count', 0)}")
+        final_state = graph.invoke(initial_state, config)
 
-    print(f"\n💬 Response:")
-    print("-" * 60)
-    print(final_state.get('final_response', 'No response'))
-    print("-" * 60)
+        print(f"\n📍 Route: {final_state.get('route')}")
+        print(f"[Mode]  Execution Mode: {final_state.get('execution_mode')}")
+        print(f"🔄 Retries: {final_state.get('retry_count', 0)}")
 
-    print(f"\n📊 Display Format: {final_state.get('display_format')}")
+        print(f"\n💬 Response:")
+        print("-" * 60)
+        print(final_state.get('final_response', 'No response'))
+        print("-" * 60)
 
-    if final_state.get('display_data'):
-        data = final_state['display_data']
-        if 'rows' in data:
-            print(f"\n📈 Data ({len(data['rows'])} rows):")
-            for i, row in enumerate(data['rows'][:3], 1):  # Show first 3
-                print(f"  {i}. {row}")
+        print(f"\n📊 Display Format: {final_state.get('display_format')}")
 
-    print("\n" + "=" * 60)
-    print("[SUCCESS] Test complete!")
+        if final_state.get('display_data'):
+            data = final_state['display_data']
+            if 'rows' in data:
+                print(f"\n📈 Data ({len(data['rows'])} rows):")
+                for i, row in enumerate(data['rows'][:3], 1):  # Show first 3
+                    print(f"  {i}. {row}")
 
-except Exception as e:
-    print(f"\n[ERROR] Error: {e}")
-    import traceback
-    traceback.print_exc()
+        print("\n" + "=" * 60)
+        print("[SUCCESS] Test complete!")
+
+    except Exception as e:
+        print(f"\n[ERROR] Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

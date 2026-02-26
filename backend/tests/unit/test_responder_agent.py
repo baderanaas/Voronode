@@ -11,13 +11,13 @@ Tests:
 import pytest
 from unittest.mock import Mock, patch
 
-from backend.agents.multi_agent.responder_agent import ResponderAgent
+from backend.agents.responder_agent import ResponderAgent
 
 
 @pytest.fixture
 def responder_agent():
     """Create ResponderAgent with mocked OpenAIClient."""
-    with patch("backend.agents.multi_agent.responder_agent.OpenAIClient") as mock_openai_cls:
+    with patch("backend.agents.responder_agent.OpenAIClient") as mock_openai_cls:
         mock_openai = Mock()
         mock_openai_cls.return_value = mock_openai
         agent = ResponderAgent()

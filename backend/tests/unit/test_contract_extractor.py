@@ -13,14 +13,14 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
-from backend.agents.contract_extractor import ContractExtractor
+from backend.ingestion.contract_extractor import ContractExtractor
 from backend.core.models import Contract
 
 
 @pytest.fixture
 def contract_extractor():
     """Create ContractExtractor with mocked GroqClient."""
-    with patch("backend.agents.contract_extractor.GroqClient") as mock_groq_cls:
+    with patch("backend.ingestion.contract_extractor.GroqClient") as mock_groq_cls:
         mock_groq = Mock()
         mock_groq_cls.return_value = mock_groq
         extractor = ContractExtractor()

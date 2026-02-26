@@ -73,7 +73,7 @@ class ContractUploadTool:
         path = Path(file_path)
         try:
             # --- Step 1: Extract ---
-            from backend.agents.contract_extractor import ContractExtractor
+            from backend.ingestion.contract_extractor import ContractExtractor
             extractor = ContractExtractor()
             raw_text = extractor._extract_text_from_pdf(path)
             contract_data = extractor.structure_contract(raw_text)

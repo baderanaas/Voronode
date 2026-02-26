@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from backend.core.state import WorkflowState
-from backend.workflows.nodes import (
+from backend.ingestion.pipeline.nodes import (
     extract_text_node,
     structure_invoice_node,
     validate_invoice_node,
@@ -21,7 +21,7 @@ from backend.workflows.nodes import (
     finalize_node,
     error_handler_node,
 )
-from backend.workflows.routing import (
+from backend.ingestion.pipeline.routing import (
     check_for_critical_failure,
     should_retry_extraction,
     route_by_validation_severity,

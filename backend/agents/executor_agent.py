@@ -65,56 +65,56 @@ class ExecutorAgent:
         """
         # Import tools (will be implemented in later tasks)
         try:
-            from backend.tools.cypher_query_tool import CypherQueryTool
+            from backend.agents.tools.cypher_query_tool import CypherQueryTool
             self.tools["CypherQueryTool"] = CypherQueryTool()
         except ImportError:
             logger.warning("CypherQueryTool not yet implemented")
             self.tools["CypherQueryTool"] = self._create_placeholder_tool("CypherQueryTool")
 
         try:
-            from backend.tools.vector_search_tool import VectorSearchTool
+            from backend.agents.tools.vector_search_tool import VectorSearchTool
             self.tools["VectorSearchTool"] = VectorSearchTool()
         except ImportError:
             logger.warning("VectorSearchTool not yet implemented")
             self.tools["VectorSearchTool"] = self._create_placeholder_tool("VectorSearchTool")
 
         try:
-            from backend.tools.calculator_tool import CalculatorTool
+            from backend.agents.tools.calculator_tool import CalculatorTool
             self.tools["CalculatorTool"] = CalculatorTool()
         except ImportError:
             logger.warning("CalculatorTool not yet implemented")
             self.tools["CalculatorTool"] = self._create_placeholder_tool("CalculatorTool")
 
         try:
-            from backend.tools.graph_explorer_tool import GraphExplorerTool
+            from backend.agents.tools.graph_explorer_tool import GraphExplorerTool
             self.tools["GraphExplorerTool"] = GraphExplorerTool()
         except ImportError:
             logger.warning("GraphExplorerTool not yet implemented")
             self.tools["GraphExplorerTool"] = self._create_placeholder_tool("GraphExplorerTool")
 
         try:
-            from backend.tools.compliance_check_tool import ComplianceCheckTool
+            from backend.agents.tools.compliance_check_tool import ComplianceCheckTool
             self.tools["ComplianceCheckTool"] = ComplianceCheckTool()
         except ImportError:
             logger.warning("ComplianceCheckTool not yet implemented")
             self.tools["ComplianceCheckTool"] = self._create_placeholder_tool("ComplianceCheckTool")
 
         try:
-            from backend.tools.datetime_tool import DateTimeTool
+            from backend.agents.tools.datetime_tool import DateTimeTool
             self.tools["DateTimeTool"] = DateTimeTool()
         except ImportError:
             logger.warning("DateTimeTool not yet implemented")
             self.tools["DateTimeTool"] = self._create_placeholder_tool("DateTimeTool")
 
         try:
-            from backend.tools.web_search_tool import WebSearchTool
+            from backend.agents.tools.web_search_tool import WebSearchTool
             self.tools["WebSearchTool"] = WebSearchTool()
         except ImportError:
             logger.warning("WebSearchTool not yet implemented")
             self.tools["WebSearchTool"] = self._create_placeholder_tool("WebSearchTool")
 
         try:
-            from backend.tools.python_repl_tool import PythonREPLTool
+            from backend.agents.tools.python_repl_tool import PythonREPLTool
             self.tools["PythonREPLTool"] = PythonREPLTool()
         except ImportError:
             logger.warning("PythonREPLTool not yet implemented")

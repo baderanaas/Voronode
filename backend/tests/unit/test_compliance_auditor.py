@@ -13,15 +13,14 @@ from decimal import Decimal
 from datetime import date
 from unittest.mock import Mock, MagicMock
 
-from backend.agents.compliance_auditor import ContractComplianceAuditor
+from backend.ingestion.compliance_auditor import ContractComplianceAuditor
 from backend.core.models import Invoice, LineItem, Contract
 
 
 @pytest.fixture
 def mock_neo4j_client():
     """Mock Neo4j client for testing."""
-    client = Mock()
-    client.driver = Mock()
+    client = MagicMock()
     return client
 
 
@@ -131,12 +130,14 @@ class TestRetentionValidation:
         )
 
         # Add retention line item (10% of 100000 = 10000)
+        # The auditor sums totals of items with "retention" in description,
+        # so the value should match expected_retention (positive amount withheld)
         sample_invoice.line_items.append(
             LineItem(
                 description="Retention (10%)",
                 quantity=Decimal("1"),
-                unit_price=Decimal("-10000"),
-                total=Decimal("-10000"),
+                unit_price=Decimal("10000"),
+                total=Decimal("10000"),
                 cost_code="99-RET",
             )
         )

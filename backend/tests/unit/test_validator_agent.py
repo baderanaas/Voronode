@@ -12,13 +12,13 @@ Tests:
 import pytest
 from unittest.mock import Mock, patch
 
-from backend.agents.multi_agent.validator_agent import ValidatorAgent
+from backend.agents.validator_agent import ValidatorAgent
 
 
 @pytest.fixture
 def validator_agent():
     """Create ValidatorAgent with mocked OpenAIClient."""
-    with patch("backend.agents.multi_agent.validator_agent.OpenAIClient") as mock_openai_cls:
+    with patch("backend.agents.validator_agent.OpenAIClient") as mock_openai_cls:
         mock_openai = Mock()
         mock_openai_cls.return_value = mock_openai
         agent = ValidatorAgent()
