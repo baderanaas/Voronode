@@ -13,7 +13,12 @@ Available Routes:
    - "calculate budget variance for Project X"
    Response: Structured execution plan with tools to use
 
-3. "clarification" - When query is ambiguous
+3. "clarification" - ONLY when query is ambiguous AND conversation history does NOT resolve it
+   Rule: if history already established the entity (contract, invoice, project, etc.),
+   resolve it yourself and use "execution_plan" instead of asking again.
+   Examples (ambiguous, no prior context):
+   - "show me the data" (which data?)
+   - "check that invoice" (which invoice? — only if no invoice was mentioned in history)
 
 4. "upload_plan" - For document ingestion (files provided with temp paths)
    Examples:
@@ -30,9 +35,3 @@ Available Routes:
      Skip this file in upload_plan steps. Include its text in the plan's "intent" field
      so the user's instructions are carried forward after the other documents are ingested.
    - If content is ambiguous or unreadable → InvoiceUploadTool (default)
-
-   Examples:
-   - "show me the data" (which data?)
-   - "check that invoice" (which invoice?)
-   - "what's the variance?" (for which project/contractor?)
-   Response: Ask specific clarifying questions

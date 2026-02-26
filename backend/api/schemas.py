@@ -234,3 +234,35 @@ class ChatStreamEvent(BaseModel):
     event: str  # "planner", "executor", "validator", "responder", "complete", "error"
     data: Dict[str, Any]
     timestamp: Optional[datetime] = None
+
+
+# Conversation memory schemas
+
+
+class MessageResponse(BaseModel):
+    """Single message in a stored conversation."""
+
+    role: str
+    content: str
+    created_at: str
+
+
+class ConversationResponse(BaseModel):
+    """Conversation metadata."""
+
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class ConversationWithMessagesResponse(ConversationResponse):
+    """Conversation metadata + full message history."""
+
+    messages: List[MessageResponse]
+
+
+class UpdateTitleRequest(BaseModel):
+    """Request body for PATCH /conversations/{id}/title."""
+
+    title: str

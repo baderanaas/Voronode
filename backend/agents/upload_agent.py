@@ -51,7 +51,12 @@ class UploadAgent:
 
         logger.info("upload_agent_tools_initialized", tool_count=len(self.tools))
 
-    def execute(self, plan: Dict[str, Any], user_query: str) -> Dict[str, Any]:
+    def execute(
+        self,
+        plan: Dict[str, Any],
+        user_query: str,
+        user_id: str = "default_user",
+    ) -> Dict[str, Any]:
         """
         Execute all upload steps from plan sequentially.
 
@@ -97,7 +102,7 @@ class UploadAgent:
                 continue
 
             try:
-                result = tool.run(query=user_query, action=action)
+                result = tool.run(query=user_query, action=action, user_id=user_id)
                 step_status = result.get("status", "success")
                 step_result = {
                     "step": idx + 1,

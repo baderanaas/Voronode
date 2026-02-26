@@ -15,6 +15,10 @@ class ConversationState(TypedDict, total=False):
     the complete conversation context, execution plan, results, and validation.
     """
 
+    # ===== User Identity =====
+    user_id: str
+    """User identifier for data scoping. Defaults to 'default_user' until auth is added."""
+
     # ===== User Input =====
     user_query: str
     """The current user query/message."""

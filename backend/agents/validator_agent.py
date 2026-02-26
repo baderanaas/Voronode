@@ -162,7 +162,10 @@ class ValidatorAgent:
         - Be strict but fair
         - Consider partial failures: if some tools succeeded with useful data, that may be okay
         - Check if results actually answer the question (not just return data)
-        - Look for empty datasets that should have data
+        - IMPORTANT: An empty result set (0 rows from a database query) IS a valid answer to
+          existence questions like "are there any invoices?", "is there a contract?", "find X".
+          Mark overall_valid=true when the query ran successfully but found nothing — the answer
+          is simply "none found". Only mark invalid if the tool itself errored or crashed.
         - Check for logical inconsistencies
 
         Respond in JSON:

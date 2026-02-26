@@ -19,13 +19,6 @@ sys.path.insert(0, str(frontend_path))
 from utils.api_client import APIClient
 from utils.formatters import format_currency, format_duration, format_datetime
 
-# Page config
-st.set_page_config(
-    page_title="Analytics - Voronode",
-    page_icon="📊",
-    layout="wide",
-)
-
 st.title("📊 Analytics Dashboard")
 st.markdown("Processing metrics, trends, and insights.")
 

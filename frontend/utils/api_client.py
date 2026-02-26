@@ -165,12 +165,43 @@ class APIClient:
         response = _self._request("GET", f"/api/budgets/{budget_id}/variance")
         return response.json()
 
+    # Conversation management
+    def create_conversation(self) -> Dict[str, Any]:
+        """Create a new empty conversation."""
+        response = self._request("POST", "/api/conversations")
+        return response.json()
+
+    def list_conversations(self) -> List[Dict[str, Any]]:
+        """List all conversations, most recent first."""
+        response = self._request("GET", "/api/conversations")
+        return response.json()
+
+    def get_conversation(self, conversation_id: str) -> Dict[str, Any]:
+        """Get a conversation with its full message history."""
+        response = self._request("GET", f"/api/conversations/{conversation_id}")
+        return response.json()
+
+    def delete_conversation(self, conversation_id: str) -> None:
+        """Delete a conversation and all its messages."""
+        self._request("DELETE", f"/api/conversations/{conversation_id}")
+
+    def update_conversation_title(
+        self, conversation_id: str, title: str
+    ) -> Dict[str, Any]:
+        """Update the title of a conversation."""
+        response = self._request(
+            "PATCH",
+            f"/api/conversations/{conversation_id}/title",
+            json={"title": title},
+        )
+        return response.json()
+
     # Phase 7: Conversational AI
     def send(
         self,
         message: str = "",
         files: Optional[List[Dict[str, Any]]] = None,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_id: str = "",
         session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -179,17 +210,15 @@ class APIClient:
         Args:
             message: User message text (optional when files are provided)
             files: List of {"bytes": b"...", "name": "file.pdf"} dicts (optional)
-            conversation_history: List of {"role": ..., "content": ...} dicts
-            session_id: Optional session ID for conversation persistence
+            conversation_id: Conversation ID for history lookup
+            session_id: Optional session ID for LangGraph thread
 
         Returns:
             Chat response with formatted text, display format, and data
         """
-        import json as _json
-
         data = {
             "message": message,
-            "conversation_history": _json.dumps(conversation_history or []),
+            "conversation_id": conversation_id,
             "session_id": session_id or "",
         }
         multipart_files = (
@@ -202,7 +231,7 @@ class APIClient:
         self,
         message: str = "",
         files: Optional[List[Dict[str, Any]]] = None,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_id: str = "",
         session_id: Optional[str] = None,
     ):
         """
@@ -213,8 +242,8 @@ class APIClient:
         Args:
             message: User message text (optional when files are provided)
             files: List of {"bytes": b"...", "name": "file.pdf"} dicts (optional)
-            conversation_history: List of {"role": ..., "content": ...} dicts
-            session_id: Optional session ID for conversation persistence
+            conversation_id: Conversation ID for history lookup
+            session_id: Optional session ID for LangGraph thread
 
         Yields:
             Parsed event dicts with "event" and "data" keys
@@ -224,7 +253,7 @@ class APIClient:
         url = f"{self.base_url}/api/chat/stream"
         data = {
             "message": message,
-            "conversation_history": _json.dumps(conversation_history or []),
+            "conversation_id": conversation_id,
             "session_id": session_id or "",
         }
         multipart_files = (

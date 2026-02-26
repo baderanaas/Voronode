@@ -21,13 +21,6 @@ from utils.formatters import (
 )
 from components.anomaly_badge import render_anomaly_badge, get_severity_level
 
-# Page config
-st.set_page_config(
-    page_title="Risk Feed - Voronode",
-    page_icon="🚨",
-    layout="wide",
-)
-
 st.title("🚨 Risk Feed")
 st.markdown("Real-time monitoring of invoice processing and anomaly alerts.")
 

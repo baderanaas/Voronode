@@ -5,6 +5,9 @@ from typing_extensions import Annotated
 class WorkflowState(TypedDict):
     """State object passed between agents in LangGraph workflow"""
 
+    # User identity
+    user_id: Optional[str]  # defaults to "default_user" until auth is added
+
     # Document info
     document_id: str
     document_path: str

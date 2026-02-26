@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     compliance_critical_threshold: int = 1
     compliance_high_threshold: int = 2
 
+    # Memory / conversation persistence
+    sqlite_db_path: str = "data/conversations.db"
+    conversation_window_size: int = 10   # recent messages sent to planner
+    memory_search_limit: int = 5         # Mem0 memories injected per request
+    memory_max_chars: int = 1500         # cap on total memory text
+
     # General
     log_level: str = "INFO"
 

@@ -18,13 +18,6 @@ sys.path.insert(0, str(frontend_path))
 from utils.api_client import APIClient
 from utils.formatters import format_currency, format_date
 
-# Page config
-st.set_page_config(
-    page_title="Graph Explorer - Voronode",
-    page_icon="🔍",
-    layout="wide",
-)
-
 st.title("🔍 Graph Explorer")
 st.markdown("Visualize relationships in the knowledge graph.")
 

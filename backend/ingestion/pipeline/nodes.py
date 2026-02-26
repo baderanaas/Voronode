@@ -440,7 +440,9 @@ def insert_graph_node(state: WorkflowState) -> Dict[str, Any]:
         invoice = _dict_to_invoice(state["extracted_data"])
 
         graph_builder = GraphBuilder()
-        invoice_id = graph_builder.insert_invoice(invoice)
+        invoice_id = graph_builder.insert_invoice(
+            invoice, user_id=state.get("user_id") or "default_user"
+        )
 
         logger.info(
             "node_insert_graph_success",

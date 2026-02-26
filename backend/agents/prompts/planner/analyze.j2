@@ -3,8 +3,19 @@
 
 Analyze this user query and decide how to handle it.
 
-User Query: "{{ user_message }}"
-Conversation History: {{ history[-5:] if history else [] }}
+{% if history %}
+Conversation History (most recent last):
+{% for msg in history[-5:] %}
+{{ msg.role | capitalize }}: {{ msg.content }}
+{% endfor %}
+{% endif %}
+
+IMPORTANT: Before routing to "clarification", resolve any ambiguous pronouns or references
+(e.g. "it", "that", "the contract", "the invoice") using the conversation history above.
+If a prior turn already established which entity is being discussed, treat the query as
+unambiguous and route to "execution_plan".
+
+Current User Query: "{{ user_message }}"
 
 {% include "planner/_available_routes.j2" %}
 

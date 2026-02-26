@@ -25,6 +25,7 @@ class InvoiceUploadTool:
         query: str = "",
         action: str = "",
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Execute the invoice upload pipeline.
@@ -56,7 +57,7 @@ class InvoiceUploadTool:
                 "error": "Missing file_path parameter. Use: process|file_path=<path>",
             }
 
-        return self._process_invoice(file_path)
+        return self._process_invoice(file_path, user_id)
 
     def _parse_action(self, action: str) -> Dict[str, Any]:
         """Parse 'command|key=value|...' into dict."""
@@ -69,7 +70,9 @@ class InvoiceUploadTool:
                 params[key.strip()] = value
         return {"command": command, "params": params}
 
-    def _process_invoice(self, file_path: str) -> Dict[str, Any]:
+    def _process_invoice(
+        self, file_path: str, user_id: str = "default_user"
+    ) -> Dict[str, Any]:
         """Run the full invoice ingestion pipeline."""
         path = Path(file_path)
         try:
@@ -89,7 +92,7 @@ class InvoiceUploadTool:
             # --- Step 3: Insert into Neo4j ---
             from backend.services.graph_builder import GraphBuilder
             graph_builder = GraphBuilder()
-            invoice_id = graph_builder.insert_invoice(invoice)
+            invoice_id = graph_builder.insert_invoice(invoice, user_id=user_id)
 
             # --- Step 4: Embed in ChromaDB (non-fatal) ---
             try:

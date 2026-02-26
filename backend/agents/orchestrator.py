@@ -185,6 +185,7 @@ def upload_agent_node(state: ConversationState) -> ConversationState:
     results = upload_agent.execute(
         plan=plan,
         user_query=state["user_query"],
+        user_id=state.get("user_id", "default_user"),
     )
 
     state["execution_results"] = results

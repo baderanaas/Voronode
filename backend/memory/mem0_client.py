@@ -1,0 +1,92 @@
+"""Singleton Mem0 client — extracts and retrieves facts across conversations."""
+
+from mem0 import Memory
+import structlog
+
+from backend.core.config import settings
+
+logger = structlog.get_logger()
+
+_instance = None
+
+
+class Mem0Client:
+    """Thin wrapper around mem0.Memory with safe error handling."""
+
+    def __init__(self):
+        global _instance
+        if _instance is None:
+            config = {
+                "llm": {
+                    "provider": "openai",
+                    "config": {
+                        "model": settings.openai_chat_model,
+                        "temperature": 0.1,
+                        "api_key": settings.openai_api_key,
+                    },
+                },
+                "embedder": {
+                    "provider": "openai",
+                    "config": {
+                        "model": settings.openai_embedding_model,
+                        "api_key": settings.openai_api_key,
+                    },
+                },
+                "vector_store": {
+                    "provider": "chroma",
+                    "config": {
+                        "host": settings.chromadb_host,
+                        "port": settings.chromadb_port,
+                        "collection_name": "memories",
+                    },
+                },
+            }
+            try:
+                _instance = Memory.from_config(config)
+                logger.info("mem0_initialized")
+            except Exception as exc:
+                logger.error("mem0_init_failed", error=str(exc))
+                _instance = None
+
+        self._memory = _instance
+
+    def add_turn(self, messages: list[dict]):
+        """Extract and store facts from a conversation turn."""
+        if not self._memory:
+            return
+        try:
+            self._memory.add(messages, user_id="default_user")
+        except Exception as exc:
+            logger.warning("mem0_add_failed", error=str(exc))
+
+    def search(self, query: str, limit: int | None = None) -> str:
+        """Return top memories as a bullet-point string, capped at max_chars."""
+        if not self._memory or not query:
+            return ""
+        effective_limit = limit if limit is not None else settings.memory_search_limit
+        try:
+            results = self._memory.search(
+                query, user_id="default_user", limit=effective_limit
+            )
+            memories = (
+                results if isinstance(results, list) else results.get("results", [])
+            )
+            if not memories:
+                return ""
+
+            lines = []
+            total = 0
+            for m in memories:
+                text = m.get("memory", "") if isinstance(m, dict) else str(m)
+                if not text:
+                    continue
+                line = f"- {text}"
+                if total + len(line) > settings.memory_max_chars:
+                    break
+                lines.append(line)
+                total += len(line)
+
+            return "\n".join(lines)
+        except Exception as exc:
+            logger.warning("mem0_search_failed", error=str(exc))
+            return ""

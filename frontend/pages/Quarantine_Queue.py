@@ -19,13 +19,6 @@ from components.invoice_card import render_invoice_card
 from components.anomaly_badge import render_anomaly_list, render_anomaly_summary
 from components.workflow_status import render_workflow_status
 
-# Page config
-st.set_page_config(
-    page_title="Quarantine Queue - Voronode",
-    page_icon="⚠️",
-    layout="wide",
-)
-
 st.title("⚠️ Quarantine Queue")
 st.markdown("Review and approve invoices that require human oversight.")
 

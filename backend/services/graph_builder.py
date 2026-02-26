@@ -17,7 +17,7 @@ class GraphBuilder:
     def __init__(self):
         self.neo4j_client = Neo4jClient()
 
-    def insert_invoice(self, invoice: Invoice) -> str:
+    def insert_invoice(self, invoice: Invoice, user_id: str = "default_user") -> str:
         """
         Insert invoice into Neo4j with all relationships.
 
@@ -49,7 +49,7 @@ class GraphBuilder:
             logger.info("contractor_resolved", contractor_id=contractor_id)
 
             # Step 2: Create invoice node
-            invoice_id = self._create_invoice_node(invoice, contractor_id)
+            invoice_id = self._create_invoice_node(invoice, contractor_id, user_id)
             logger.info("invoice_node_created", invoice_id=invoice_id)
 
             # Step 3: Create line items
@@ -124,7 +124,9 @@ class GraphBuilder:
 
         return contractor_id
 
-    def _create_invoice_node(self, invoice: Invoice, contractor_id: str) -> str:
+    def _create_invoice_node(
+        self, invoice: Invoice, contractor_id: str, user_id: str = "default_user"
+    ) -> str:
         """
         Create or update invoice node with MERGE (idempotent).
 
@@ -148,7 +150,8 @@ class GraphBuilder:
                      i.updated_at = datetime()
         SET i.due_date = CASE WHEN $due_date IS NOT NULL THEN date($due_date) ELSE null END,
             i.extracted_at = datetime($extracted_at),
-            i.extraction_confidence = $extraction_confidence
+            i.extraction_confidence = $extraction_confidence,
+            i.user_id = $user_id
 
         WITH i
         MATCH (c:Contractor {id: $contractor_id})
@@ -174,6 +177,7 @@ class GraphBuilder:
             "extraction_confidence": invoice.extraction_confidence,
             "contractor_id": contractor_id,
             "contract_id": invoice.contract_id,
+            "user_id": user_id,
         }
 
         result = self.neo4j_client.run_query(query, params)
@@ -233,7 +237,7 @@ class GraphBuilder:
             cost_code=item.cost_code,
         )
 
-    def insert_contract(self, contract: Contract) -> str:
+    def insert_contract(self, contract: Contract, user_id: str = "default_user") -> str:
         """
         Insert contract into Neo4j with all relationships.
 
@@ -289,6 +293,7 @@ class GraphBuilder:
                           ct.approved_cost_codes = $approved_cost_codes,
                           ct.extracted_at = datetime($extracted_at),
                           ct.extraction_confidence = $extraction_confidence,
+                          ct.user_id = $user_id,
                           ct.created_at = datetime()
             ON MATCH SET ct.contractor_name = $contractor_name,
                          ct.project_name = $project_name,
@@ -301,6 +306,7 @@ class GraphBuilder:
                          ct.approved_cost_codes = $approved_cost_codes,
                          ct.extracted_at = datetime($extracted_at),
                          ct.extraction_confidence = $extraction_confidence,
+                         ct.user_id = $user_id,
                          ct.updated_at = datetime()
 
             WITH ct
@@ -330,6 +336,7 @@ class GraphBuilder:
                 "approved_cost_codes": contract.approved_cost_codes,
                 "extracted_at": contract.extracted_at.isoformat() if contract.extracted_at else None,
                 "extraction_confidence": contract.extraction_confidence,
+                "user_id": user_id,
                 "resolved_contractor_id": contractor_id,
                 "resolved_project_id": project_id,
             }
@@ -505,7 +512,12 @@ class GraphBuilder:
 
         return invoice_data
 
-    def insert_budget(self, budget: "Budget", budget_lines: List["BudgetLine"]) -> str:
+    def insert_budget(
+        self,
+        budget: "Budget",
+        budget_lines: List["BudgetLine"],
+        user_id: str = "default_user",
+    ) -> str:
         """
         Insert budget and budget lines into Neo4j.
 
@@ -549,6 +561,7 @@ class GraphBuilder:
                           b.extracted_at = datetime($extracted_at),
                           b.validation_warnings = $validation_warnings,
                           b.status = $status,
+                          b.user_id = $user_id,
                           b.created_at = datetime()
             ON MATCH SET b.project_name = $project_name,
                          b.total_allocated = $total_allocated,
@@ -558,6 +571,7 @@ class GraphBuilder:
                          b.extracted_at = datetime($extracted_at),
                          b.validation_warnings = $validation_warnings,
                          b.status = $status,
+                         b.user_id = $user_id,
                          b.updated_at = datetime()
 
             WITH b
@@ -579,6 +593,7 @@ class GraphBuilder:
                 "extracted_at": budget.extracted_at.isoformat() if budget.extracted_at else None,
                 "validation_warnings": budget.validation_warnings,
                 "status": budget.status,
+                "user_id": user_id,
                 "resolved_project_id": project_id,
             }
 
@@ -589,7 +604,7 @@ class GraphBuilder:
 
             # Step 3: Insert budget lines
             for line in budget_lines:
-                self._insert_budget_line(line, budget.id, project_id)
+                self._insert_budget_line(line, budget.id, project_id, user_id)
 
             logger.info(
                 "budget_insertion_complete",
@@ -607,7 +622,13 @@ class GraphBuilder:
             )
             raise ValueError(f"Failed to insert budget into graph: {e}")
 
-    def _insert_budget_line(self, line: "BudgetLine", budget_id: str, project_id: str):
+    def _insert_budget_line(
+        self,
+        line: "BudgetLine",
+        budget_id: str,
+        project_id: str,
+        user_id: str = "default_user",
+    ):
         """Insert a single budget line into Neo4j."""
         query = """
         MERGE (bl:BudgetLine {id: $id})
@@ -618,6 +639,7 @@ class GraphBuilder:
                       bl.allocated = $allocated,
                       bl.spent = $spent,
                       bl.remaining = $remaining,
+                      bl.user_id = $user_id,
                       bl.created_at = datetime()
         ON MATCH SET bl.allocated = $allocated,
                      bl.spent = $spent,
@@ -645,6 +667,7 @@ class GraphBuilder:
             "allocated": float(line.allocated),
             "spent": float(line.spent),
             "remaining": float(line.remaining),
+            "user_id": user_id,
         }
 
         self.neo4j_client.run_query(query, params)

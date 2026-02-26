@@ -25,6 +25,7 @@ class BudgetUploadTool:
         query: str = "",
         action: str = "",
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Execute the budget upload pipeline.
@@ -56,7 +57,7 @@ class BudgetUploadTool:
                 "error": "Missing file_path parameter. Use: process|file_path=<path>",
             }
 
-        return self._process_budget(file_path)
+        return self._process_budget(file_path, user_id)
 
     def _parse_action(self, action: str) -> Dict[str, Any]:
         """Parse 'command|key=value|...' into dict."""
@@ -69,7 +70,9 @@ class BudgetUploadTool:
                 params[key.strip()] = value
         return {"command": command, "params": params}
 
-    def _process_budget(self, file_path: str) -> Dict[str, Any]:
+    def _process_budget(
+        self, file_path: str, user_id: str = "default_user"
+    ) -> Dict[str, Any]:
         """Run the full budget ingestion pipeline."""
         path = Path(file_path)
         try:
@@ -108,7 +111,7 @@ class BudgetUploadTool:
             # --- Step 3: Insert into Neo4j ---
             from backend.services.graph_builder import GraphBuilder
             graph_builder = GraphBuilder()
-            budget_id = graph_builder.insert_budget(budget, budget_lines)
+            budget_id = graph_builder.insert_budget(budget, budget_lines, user_id=user_id)
 
             summary = (
                 f"Budget for {budget.project_name} with total allocation of "

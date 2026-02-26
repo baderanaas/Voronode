@@ -24,6 +24,7 @@ class ContractUploadTool:
         query: str = "",
         action: str = "",
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Execute the contract upload pipeline.
@@ -55,7 +56,7 @@ class ContractUploadTool:
                 "error": "Missing file_path parameter. Use: process|file_path=<path>",
             }
 
-        return self._process_contract(file_path)
+        return self._process_contract(file_path, user_id)
 
     def _parse_action(self, action: str) -> Dict[str, Any]:
         """Parse 'command|key=value|...' into dict."""
@@ -68,7 +69,9 @@ class ContractUploadTool:
                 params[key.strip()] = value
         return {"command": command, "params": params}
 
-    def _process_contract(self, file_path: str) -> Dict[str, Any]:
+    def _process_contract(
+        self, file_path: str, user_id: str = "default_user"
+    ) -> Dict[str, Any]:
         """Run the full contract ingestion pipeline."""
         path = Path(file_path)
         try:
@@ -85,7 +88,7 @@ class ContractUploadTool:
             # --- Step 3: Insert into Neo4j ---
             from backend.services.graph_builder import GraphBuilder
             graph_builder = GraphBuilder()
-            contract_id = graph_builder.insert_contract(contract)
+            contract_id = graph_builder.insert_contract(contract, user_id=user_id)
 
             summary = (
                 f"Contract {contract.id} with {contract.contractor_name} "
