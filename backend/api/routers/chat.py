@@ -61,7 +61,7 @@ async def chat(
         if conversation_id
         else []
     )
-    memories_text = _mem0.search(
+    memories_text = await _mem0.search(
         message or "context", limit=settings.memory_search_limit, user_id=user_id
     )
 
@@ -141,7 +141,7 @@ async def chat(
                     conv = _store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
                         _store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
-                    _mem0.add_turn([
+                    await _mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
                     ], user_id=user_id)
@@ -227,7 +227,7 @@ async def chat(
                 conv = _store.get_conversation(conversation_id, user_id=user_id)
                 if conv and conv["title"] == "New conversation":
                     _store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
-                _mem0.add_turn([
+                await _mem0.add_turn([
                     {"role": "user", "content": synthetic_user},
                     {"role": "assistant", "content": upload_summary},
                 ], user_id=user_id)
@@ -241,7 +241,7 @@ async def chat(
                 if conv and conv["title"] == "New conversation" and original_message:
                     _store.update_title(conversation_id, original_message[:60].strip(), user_id=user_id)
                 if original_message and response_text:
-                    _mem0.add_turn([
+                    await _mem0.add_turn([
                         {"role": "user", "content": original_message},
                         {"role": "assistant", "content": response_text},
                     ], user_id=user_id)
@@ -328,7 +328,7 @@ async def chat_stream(
             if conversation_id
             else []
         )
-        memories_text = mem0.search(
+        memories_text = await mem0.search(
             message or "context", limit=settings.memory_search_limit, user_id=user_id
         )
 
@@ -456,7 +456,7 @@ async def chat_stream(
                     conv = store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
                         store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
-                    mem0.add_turn([
+                    await mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
                     ], user_id=user_id)
@@ -543,7 +543,7 @@ async def chat_stream(
                     conv = store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
                         store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
-                    mem0.add_turn([
+                    await mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
                     ], user_id=user_id)
@@ -557,7 +557,7 @@ async def chat_stream(
                     if conv and conv["title"] == "New conversation" and original_message:
                         store.update_title(conversation_id, original_message[:60].strip(), user_id=user_id)
                     if original_message and response_text:
-                        mem0.add_turn([
+                        await mem0.add_turn([
                             {"role": "user", "content": original_message},
                             {"role": "assistant", "content": response_text},
                         ], user_id=user_id)

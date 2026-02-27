@@ -1,5 +1,7 @@
 """Singleton Mem0 client — extracts and retrieves facts across conversations."""
 
+import asyncio
+
 from mem0 import Memory
 import structlog
 
@@ -7,6 +9,7 @@ from backend.core.config import settings
 
 logger = structlog.get_logger()
 
+_FAILED = object()  # sentinel: init was attempted but failed
 _instance = None
 
 
@@ -46,27 +49,27 @@ class Mem0Client:
                 logger.info("mem0_initialized")
             except Exception as exc:
                 logger.error("mem0_init_failed", error=str(exc))
-                _instance = None
+                _instance = _FAILED
 
-        self._memory = _instance
+        self._memory = _instance if _instance is not _FAILED else None
 
-    def add_turn(self, messages: list[dict], user_id: str = "default_user"):
-        """Extract and store facts from a conversation turn."""
+    async def add_turn(self, messages: list[dict], user_id: str = "default_user"):
+        """Extract and store facts from a conversation turn (non-blocking)."""
         if not self._memory:
             return
         try:
-            self._memory.add(messages, user_id=user_id)
+            await asyncio.to_thread(self._memory.add, messages, user_id=user_id)
         except Exception as exc:
             logger.warning("mem0_add_failed", error=str(exc))
 
-    def search(self, query: str, limit: int | None = None, user_id: str = "default_user") -> str:
-        """Return top memories as a bullet-point string, capped at max_chars."""
+    async def search(self, query: str, limit: int | None = None, user_id: str = "default_user") -> str:
+        """Return top memories as a bullet-point string, capped at max_chars (non-blocking)."""
         if not self._memory or not query:
             return ""
         effective_limit = limit if limit is not None else settings.memory_search_limit
         try:
-            results = self._memory.search(
-                query, user_id=user_id, limit=effective_limit
+            results = await asyncio.to_thread(
+                self._memory.search, query, user_id=user_id, limit=effective_limit
             )
             memories = (
                 results if isinstance(results, list) else results.get("results", [])
