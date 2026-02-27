@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter
 
 from backend.api.schemas import HealthResponse
@@ -10,7 +10,7 @@ from backend.graph.client import Neo4jClient
 from backend.vector.client import ChromaDBClient
 
 router = APIRouter(tags=["health"])
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 _chroma_client = ChromaDBClient()
 

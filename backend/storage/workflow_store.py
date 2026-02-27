@@ -4,11 +4,11 @@ import sqlite3
 import json
 from typing import Optional, List, Dict, Any
 from pathlib import Path
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class WorkflowStore:

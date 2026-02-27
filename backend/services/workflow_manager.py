@@ -4,13 +4,13 @@ import uuid
 import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import structlog
+from backend.core.logging import get_logger
 
 from backend.ingestion.pipeline.invoice_workflow import compile_workflow_with_checkpoints
 from backend.storage.workflow_store import WorkflowStore
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class WorkflowManager:

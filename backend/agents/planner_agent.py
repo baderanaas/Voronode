@@ -5,13 +5,13 @@ Analyzes user queries, classifies intent, selects execution mode (one_way vs rea
 and creates execution plans. Also handles retry logic when validation fails.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, List
 
 from backend.services.llm_client import GeminiClient
 from backend.agents.prompts.prompt_manager import render_prompt
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class PlannerAgent:

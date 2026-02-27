@@ -12,14 +12,14 @@ Enhanced with:
 - Graceful degradation
 """
 
-import structlog
+from backend.core.logging import get_logger
 import time
 from typing import Dict, Any, List, Optional
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from backend.core.circuit_breaker import ToolCircuitBreakerManager, CircuitOpenError
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ExecutorAgent:

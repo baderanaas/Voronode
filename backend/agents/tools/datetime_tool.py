@@ -6,12 +6,12 @@ Examples: "last month", "overdue", "this quarter", "30 days ago"
 """
 
 import re
-import structlog
+from backend.core.logging import get_logger
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from typing import Dict, Any
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class DateTimeTool:

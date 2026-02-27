@@ -2,11 +2,15 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import structlog
+
+from backend.core.config import settings
+from voronode_logging import VoronodeLogger, CorrelationMiddleware, get_logger
+
+VoronodeLogger.configure("voronode-api", level=settings.log_level)
+
+logger = get_logger(__name__)
 
 from backend.api.routes import router
-
-logger = structlog.get_logger()
 
 # Create FastAPI app
 app = FastAPI(
@@ -14,6 +18,9 @@ app = FastAPI(
     description="Autonomous Financial Risk & Compliance System - Invoice Intelligence",
     version="0.2.0",
 )
+
+# Correlation ID propagation + HTTP request logging
+app.add_middleware(CorrelationMiddleware)
 
 # Configure CORS
 app.add_middleware(

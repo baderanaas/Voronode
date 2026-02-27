@@ -5,12 +5,12 @@ Validates response quality before sending to user. Catches hallucinations, error
 and incomplete results. Provides feedback to Planner for retry loop.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any
 
 from backend.services.llm_client import OpenAIClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ValidatorAgent:

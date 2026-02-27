@@ -5,12 +5,12 @@ Performs vector similarity search using ChromaDB embeddings to find relevant
 invoices, contracts, and budgets based on natural language queries.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, Optional, List
 
 from backend.vector.client import ChromaDBClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class VectorSearchTool:

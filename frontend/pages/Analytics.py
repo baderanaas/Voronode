@@ -17,6 +17,10 @@ sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
 from utils.formatters import format_currency
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 _CACHE_TTL = 60  # seconds
 
@@ -51,6 +55,7 @@ st.divider()
 try:
     data = _load_dashboard(api)
 except Exception as e:
+    logger.error("analytics_load_failed", error=e)
     st.error(f"Failed to load analytics: {e}")
     st.stop()
 

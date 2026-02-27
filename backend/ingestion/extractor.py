@@ -3,14 +3,14 @@
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
-import structlog
+from backend.core.logging import get_logger
 import pdfplumber
 from pypdf import PdfReader
 
 from backend.core.models import Invoice, LineItem
 from backend.services.llm_client import GroqClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class InvoiceExtractor:

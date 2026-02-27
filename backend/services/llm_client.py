@@ -11,7 +11,7 @@ import json
 import time
 from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel, ValidationError
-import structlog
+from backend.core.logging import get_logger
 from groq import Groq
 from openai import OpenAI
 from google import genai
@@ -19,7 +19,7 @@ from anthropic import Anthropic
 
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class GroqClient:

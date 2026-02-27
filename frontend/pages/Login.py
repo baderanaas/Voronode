@@ -14,6 +14,9 @@ frontend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Shared api client (no token yet)
 if "api" not in st.session_state:
@@ -51,6 +54,7 @@ with tab_login:
                 st.session_state.pop("conversations", None)
                 st.rerun()
             except Exception as e:
+                logger.error("login_failed", error=e, username=username)
                 st.error(f"Login failed: {e}")
 
 with tab_register:
@@ -80,4 +84,5 @@ with tab_register:
                 st.session_state.pop("conversations", None)
                 st.rerun()
             except Exception as e:
+                logger.error("register_failed", error=e, username=new_username)
                 st.error(f"Registration failed: {e}")

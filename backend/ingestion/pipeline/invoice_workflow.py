@@ -3,7 +3,7 @@
 import os
 import sqlite3
 from typing import Optional
-import structlog
+from backend.core.logging import get_logger
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -30,7 +30,7 @@ from backend.ingestion.pipeline.routing import (
 )
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def create_invoice_workflow_graph() -> StateGraph:

@@ -5,10 +5,10 @@ High-priority tool for market rates, contractor verification, and industry stand
 Uses Tavily Search API for reliable, AI-optimized search results.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, Optional
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class WebSearchTool:

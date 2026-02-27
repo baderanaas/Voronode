@@ -5,7 +5,7 @@ Domain tool for checking invoice compliance against contract terms.
 Validates retention, unit prices, cost codes, and billing caps.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -14,7 +14,7 @@ from backend.graph.client import Neo4jClient
 from backend.services.graph_builder import GraphBuilder
 from backend.core.models import Invoice, LineItem
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ComplianceCheckTool:

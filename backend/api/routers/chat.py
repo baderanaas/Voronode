@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
@@ -18,7 +18,7 @@ from backend.memory.conversation_store import ConversationStore
 from backend.memory.mem0_client import Mem0Client
 
 router = APIRouter(tags=["chat"])
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 # ── Non-streaming ──────────────────────────────────────────────────────────────
 

@@ -15,6 +15,9 @@ sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
 from utils.formatters import format_currency, format_date, format_datetime
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 from components.invoice_card import render_invoice_card
 from components.anomaly_badge import render_anomaly_list, render_anomaly_summary
 from components.workflow_status import render_workflow_status

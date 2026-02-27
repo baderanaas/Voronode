@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.schemas import (
@@ -16,7 +16,7 @@ from backend.auth.dependencies import get_current_user
 from backend.services.workflow_manager import WorkflowManager
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 _workflow_manager = WorkflowManager()
 

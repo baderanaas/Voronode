@@ -4,13 +4,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Dict, List, Any
 import re
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.models import Invoice, LineItem
 from backend.core.config import settings
 from backend.services.llm_client import GroqClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ValidationAnomaly:

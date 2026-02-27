@@ -1,6 +1,6 @@
 """Budget endpoints."""
 
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth.dependencies import get_current_user
@@ -13,7 +13,7 @@ from backend.core.cache import TTLCache
 from backend.services.graph_builder import GraphBuilder
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 _graph_builder = GraphBuilder()
 _budget_cache = TTLCache(ttl=120)

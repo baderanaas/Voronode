@@ -5,7 +5,16 @@ Defines the navigation structure. All page-level set_page_config calls
 have been removed; only this file calls it.
 """
 
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+# Configure structured logging before any page is loaded
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.logger import setup_frontend_logging
+
+setup_frontend_logging()
 
 st.set_page_config(
     page_title="Voronode",

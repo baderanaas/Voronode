@@ -5,7 +5,7 @@ Orchestrates the flow between Planner, Executor, Validator, and Responder agents
 with conditional routing for hybrid execution (one_way vs react modes).
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -17,7 +17,7 @@ from backend.agents.upload_agent import UploadAgent
 from backend.agents.validator_agent import ValidatorAgent
 from backend.agents.responder_agent import ResponderAgent
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 # ===== Agent Node Implementations =====

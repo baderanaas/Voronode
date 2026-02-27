@@ -2,9 +2,9 @@ from neo4j import GraphDatabase
 from neo4j.graph import Node, Relationship
 from typing import List, Dict, Any, Optional
 from backend.core.config import settings
-import structlog
+from backend.core.logging import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class Neo4jClient:

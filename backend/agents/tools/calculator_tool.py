@@ -4,12 +4,12 @@ CalculatorTool - Financial calculations and aggregations.
 Domain tool for common financial operations on invoices, contracts, and budgets.
 """
 
-import structlog
+from backend.core.logging import get_logger
 import statistics
 from typing import Dict, Any, Optional, List
 from decimal import Decimal
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class CalculatorTool:

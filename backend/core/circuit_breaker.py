@@ -9,9 +9,9 @@ for a cooldown period.
 import time
 from typing import Dict, Callable, Any
 from enum import Enum
-import structlog
+from backend.core.logging import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class CircuitState(Enum):

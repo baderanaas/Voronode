@@ -5,11 +5,11 @@ Used by UploadAgent to process invoice files provided via temp path.
 """
 
 import os
-import structlog
+from backend.core.logging import get_logger
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class InvoiceUploadTool:

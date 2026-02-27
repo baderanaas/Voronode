@@ -3,12 +3,12 @@
 import json
 import uuid
 from typing import Optional, Dict, Any, List
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.models import Invoice, LineItem, Contract
 from backend.graph.client import Neo4jClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class GraphBuilder:

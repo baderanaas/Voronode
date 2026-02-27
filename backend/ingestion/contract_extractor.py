@@ -5,14 +5,14 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import structlog
+from backend.core.logging import get_logger
 import pdfplumber
 from pypdf import PdfReader
 
 from backend.core.models import Contract
 from backend.services.llm_client import GroqClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ContractExtractor:

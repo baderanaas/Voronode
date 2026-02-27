@@ -3,9 +3,9 @@ from chromadb.config import Settings as ChromaSettings
 from chromadb.utils import embedding_functions
 from typing import Optional
 from backend.core.config import settings
-import structlog
+from backend.core.logging import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ChromaDBClient:

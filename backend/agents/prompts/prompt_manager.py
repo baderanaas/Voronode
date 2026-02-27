@@ -7,9 +7,9 @@ Centralizes prompt template management with caching and validation.
 from pathlib import Path
 from typing import Any, Dict, Optional
 from jinja2 import Environment, FileSystemLoader, Template, TemplateNotFound
-import structlog
+from backend.core.logging import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class PromptManager:

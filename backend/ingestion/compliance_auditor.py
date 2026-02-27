@@ -9,7 +9,7 @@ Validates invoices against contract terms to detect:
 """
 
 import json
-import structlog
+from backend.core.logging import get_logger
 from typing import List, Optional, Dict, Any
 from decimal import Decimal
 from datetime import datetime
@@ -17,7 +17,7 @@ from datetime import datetime
 from backend.core.models import Invoice, Contract, ComplianceAnomaly, ContractTerm, LineItem
 from backend.graph.client import Neo4jClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ContractComplianceAuditor:

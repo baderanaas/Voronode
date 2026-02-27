@@ -5,12 +5,12 @@ Domain tool for traversing and discovering relationships between entities
 (invoices, contractors, projects, contracts, budgets).
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, Optional
 
 from backend.graph.client import Neo4jClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class GraphExplorerTool:

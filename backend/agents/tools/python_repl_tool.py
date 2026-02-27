@@ -7,13 +7,13 @@ beyond what CalculatorTool provides.
 SECURITY: Sandboxed execution with restricted imports.
 """
 
-import structlog
+from backend.core.logging import get_logger
 import re
 from typing import Dict, Any, Optional
 from io import StringIO
 import sys
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class PythonREPLTool:

@@ -1,12 +1,12 @@
 """Conditional routing logic for LangGraph workflow."""
 
 from typing import Literal
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.state import WorkflowState
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def check_for_critical_failure(

@@ -4,11 +4,11 @@ ContractUploadTool - Extract and store a PDF contract.
 Used by UploadAgent to process contract files provided via temp path.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ContractUploadTool:

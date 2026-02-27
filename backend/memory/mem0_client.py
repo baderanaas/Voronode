@@ -3,11 +3,11 @@
 import asyncio
 
 from mem0 import Memory
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.config import settings
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 _FAILED = object()  # sentinel: init was attempted but failed
 _instance = None

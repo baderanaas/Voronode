@@ -21,6 +21,9 @@ from utils.formatters import (
     get_status_emoji,
 )
 from components.anomaly_badge import render_anomaly_badge, get_severity_level
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 st.title("🚨 Risk Feed")
 st.markdown("Real-time monitoring of invoice processing and anomaly alerts.")
@@ -115,6 +118,7 @@ try:
         st.metric("❌ Failed", failed_count)
 
 except Exception as e:
+    logger.error("risk_metrics_load_failed", error=e)
     st.error(f"Failed to load metrics: {e}")
 
 st.markdown("---")

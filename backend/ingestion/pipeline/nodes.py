@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
-import structlog
+from backend.core.logging import get_logger
 
 from backend.core.state import WorkflowState
 from backend.core.models import Invoice, LineItem
@@ -16,7 +16,7 @@ from backend.services.llm_client import GroqClient
 from backend.vector.client import ChromaDBClient
 from backend.graph.client import Neo4jClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def extract_text_node(state: WorkflowState) -> Dict[str, Any]:

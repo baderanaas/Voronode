@@ -1,7 +1,7 @@
 """Graph database query endpoints."""
 
 import re
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth.dependencies import get_current_user
@@ -11,7 +11,7 @@ from backend.graph.client import Neo4jClient
 router = APIRouter(prefix="/graph", tags=["graph"])
 
 _stats_cache = TTLCache(ttl=60)
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 # Labels whose nodes carry a user_id property (mirrors CypherQueryTool)
 _USER_SCOPED_LABELS = {"Invoice", "Contract", "Budget", "BudgetLine"}

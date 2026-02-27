@@ -5,12 +5,12 @@ Allows AI to manage workflows: list quarantined items, check status, and resume 
 """
 
 import json
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, List, Optional
 
 from backend.services.workflow_manager import WorkflowManager
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class WorkflowTool:

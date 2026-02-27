@@ -16,6 +16,9 @@ frontend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ── Auth guard ────────────────────────────────────────────────────────────────
 if not st.session_state.get("token"):
@@ -111,6 +114,7 @@ with st.sidebar:
             st.session_state.conversations = api.list_conversations()
             st.rerun()
         except Exception as e:
+            logger.error("create_conversation_failed", error=e)
             st.error(f"Failed to create conversation: {e}")
 
     st.markdown("---")
@@ -134,6 +138,7 @@ with st.sidebar:
                         ]
                         st.rerun()
                     except Exception as e:
+                        logger.error("load_conversation_failed", error=e)
                         st.error(f"Failed to load conversation: {e}")
 
         with col_del:
@@ -146,6 +151,7 @@ with st.sidebar:
                     st.session_state.conversations = api.list_conversations()
                     st.rerun()
                 except Exception as e:
+                    logger.error("delete_conversation_failed", error=e)
                     st.error(f"Failed to delete: {e}")
 
 
@@ -284,6 +290,7 @@ if st.session_state.pending_input is not None:
                 st.caption(f"⏱️ {processing_time:.2f}s")
 
         except Exception as e:
+            logger.error("chat_stream_failed", error=e)
             stage_placeholder.empty()
             st.error(f"Error: {e}")
             st.session_state.chat_messages.append(

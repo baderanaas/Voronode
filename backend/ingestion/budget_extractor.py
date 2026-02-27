@@ -11,7 +11,7 @@ Pipeline:
 """
 
 import pandas as pd
-import structlog
+from backend.core.logging import get_logger
 import decimal
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -21,7 +21,7 @@ from datetime import datetime
 from backend.services.llm_client import GroqClient
 from backend.core.models import BudgetLine
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class BudgetExtractor:

@@ -6,7 +6,7 @@ Generates and executes Cypher queries based on natural language actions.
 """
 
 import re
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any, Optional, List
 from datetime import date, datetime
 from neo4j.time import Date, DateTime, Time
@@ -16,7 +16,7 @@ from backend.graph.client import Neo4jClient
 from backend.services.llm_client import AnthropicClient
 from backend.agents.prompts.prompt_manager import render_prompt
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class CypherQueryResponse(BaseModel):

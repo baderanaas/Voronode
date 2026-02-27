@@ -18,6 +18,9 @@ sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
 from utils.formatters import format_currency, format_date
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 _STATS_TTL = 60  # seconds
 
@@ -387,6 +390,7 @@ with tab1:
                     st.info("Query returned no results")
 
             except Exception as e:
+                logger.error("graph_query_failed", error=e)
                 st.error(f"Query failed: {e}")
 
 with tab2:
@@ -505,6 +509,7 @@ RETURN li, i
                         st.info("Query returned no results")
 
                 except Exception as e:
+                    logger.error("custom_query_failed", error=e)
                     st.error(f"❌ Query failed: {e}")
 
 with tab3:
@@ -551,6 +556,7 @@ with tab3:
         st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
+        logger.error("graph_stats_load_failed", error=e)
         st.error(f"Failed to load statistics: {e}")
 
 # Sidebar

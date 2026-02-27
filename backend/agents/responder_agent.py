@@ -5,13 +5,13 @@ Formats validated results into user-friendly responses with appropriate display 
 (text, table, chart). Separate from Validator to maintain single responsibility.
 """
 
-import structlog
+from backend.core.logging import get_logger
 from typing import Dict, Any
 
 from backend.services.llm_client import OpenAIClient
 from backend.agents.prompts.prompt_manager import render_prompt
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class ResponderAgent:

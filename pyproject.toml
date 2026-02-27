@@ -25,7 +25,7 @@ dependencies = [
     "pydantic-settings>=2.5.0",
     # Utilities
     "python-dotenv>=1.0.0",
-    "structlog>=24.1.0",
+    # structlog removed — replaced by voronode_logging (stdlib-based)
     # Test Data Generation
     "faker>=24.0.0",
     "reportlab>=4.0.0",

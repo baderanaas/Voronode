@@ -7,11 +7,11 @@ Handles InvoiceUploadTool, ContractUploadTool, and BudgetUploadTool.
 No ReAct mode needed — uploads are deterministic, one-pass operations.
 """
 
-import structlog
+from backend.core.logging import get_logger
 import time
 from typing import Dict, Any, List
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 class UploadAgent:

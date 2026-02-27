@@ -5,7 +5,7 @@ contractor spend, and invoice aging.
 
 from datetime import datetime, timezone
 
-import structlog
+from backend.core.logging import get_logger
 from fastapi import APIRouter, Depends, HTTPException
 from neo4j.time import Date as Neo4jDate
 
@@ -13,7 +13,7 @@ from backend.auth.dependencies import get_current_user
 from backend.core.cache import TTLCache
 from backend.graph.client import Neo4jClient
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
