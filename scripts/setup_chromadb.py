@@ -6,9 +6,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.vector.client import ChromaDBClient
-import structlog
+from voronode_logging import get_logger
 
-logger = structlog.get_logger()
+logger = get_logger(__name__)
 
 
 def main():

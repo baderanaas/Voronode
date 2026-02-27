@@ -1,0 +1,27 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars to version control — only this .example file is safe to commit.
+
+project_name        = "voronode"
+location            = "westeurope"
+resource_group_name = "rg-voronode-dev"
+acr_sku             = "Basic"
+
+groq_api_key      = "gsk_..."
+openai_api_key    = "sk-..."
+gemini_api_key    = "AIza..."
+anthropic_api_key = "sk-ant-..."
+tavily_api_key    = ""
+jwt_secret_key    = "change-me-use-a-long-random-string"
+
+neo4j_password = "change-me"
+
+# LLM models (defaults match config.py — only set to override)
+groq_model             = "llama-3.3-70b-versatile"
+openai_chat_model      = "gpt-4o-mini"
+openai_embedding_model = "text-embedding-3-small"
+gemini_model           = "gemini-2.5-pro"
+anthropic_model        = "claude-haiku-4-5-20251001"
+
+# Fill these in after Step 2 (terraform output acr_login_server → docker push → update here)
+backend_image  = ""
+frontend_image = ""

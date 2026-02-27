@@ -4,6 +4,7 @@ API Client for Voronode Backend
 Centralized client for all FastAPI endpoints with error handling, caching, and retry logic.
 """
 
+import os
 import requests
 from typing import Dict, List, Optional, Any
 import streamlit as st
@@ -14,7 +15,7 @@ import time
 class APIClient:
     """Client for interacting with Voronode FastAPI backend."""
 
-    def __init__(self, base_url: str = "http://localhost:8080"):
+    def __init__(self, base_url: str = os.environ.get("BACKEND_URL", "http://localhost:8080")):
         self.base_url = base_url
         self.timeout = 3600
         self.token: str | None = None

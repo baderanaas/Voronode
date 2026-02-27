@@ -26,7 +26,7 @@ class WorkflowStore:
 
     def _init_db(self):
         """Create workflow_states table if it doesn't exist."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -63,7 +63,7 @@ class WorkflowStore:
             state: Complete workflow state dictionary
             user_id: Owner of this workflow (JWT sub)
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         cursor = conn.cursor()
 
         cursor.execute(
@@ -102,7 +102,7 @@ class WorkflowStore:
         Returns:
             Workflow state dictionary or None if not found
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -139,7 +139,7 @@ class WorkflowStore:
         Returns:
             List of quarantined workflow states
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -191,7 +191,7 @@ class WorkflowStore:
         Returns:
             List of workflow states
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -243,7 +243,7 @@ class WorkflowStore:
         Returns:
             List of all workflow states
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -290,7 +290,7 @@ class WorkflowStore:
         Args:
             document_id: Unique document identifier
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         cursor = conn.cursor()
 
         cursor.execute(

@@ -18,7 +18,14 @@ from backend.services.workflow_manager import WorkflowManager
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 logger = get_logger(__name__)
 
-_workflow_manager = WorkflowManager()
+_workflow_manager: WorkflowManager | None = None
+
+
+def get_workflow_manager() -> WorkflowManager:
+    global _workflow_manager
+    if _workflow_manager is None:
+        _workflow_manager = WorkflowManager()
+    return _workflow_manager
 
 
 @router.get("/quarantined", response_model=List[QuarantinedWorkflowResponse])
@@ -27,7 +34,7 @@ async def get_quarantined_workflows(current_user: dict = Depends(get_current_use
     user_id = current_user["id"]
     logger.info("quarantined_workflows_requested", user_id=user_id)
     try:
-        workflows = _workflow_manager.get_quarantined_workflows(user_id=user_id)
+        workflows = get_workflow_manager().get_quarantined_workflows(user_id=user_id)
         responses = []
         for wf in workflows:
             state = wf["state"]
@@ -73,7 +80,7 @@ async def resume_workflow(
             "corrections": request.corrections or {},
             "notes": request.notes,
         }
-        final_state = _workflow_manager.resume_workflow(
+        final_state = get_workflow_manager().resume_workflow(
             document_id, human_feedback, user_id=user_id
         )
         extracted_data = final_state.get("extracted_data", {})
@@ -111,7 +118,7 @@ async def get_workflow_status(
     user_id = current_user["id"]
     logger.info("workflow_status_requested", document_id=document_id, user_id=user_id)
     try:
-        workflow = _workflow_manager.get_workflow_status(document_id)
+        workflow = get_workflow_manager().get_workflow_status(document_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -147,7 +154,7 @@ async def list_workflows(
     user_id = current_user["id"]
     logger.info("workflows_list_requested", status=status, limit=limit, user_id=user_id)
     try:
-        return _workflow_manager.list_workflows(
+        return get_workflow_manager().list_workflows(
             status=status, limit=limit, user_id=user_id
         )
     except Exception as e:
@@ -163,7 +170,7 @@ async def get_workflow(
     user_id = current_user["id"]
     logger.info("workflow_get_requested", workflow_id=workflow_id, user_id=user_id)
     try:
-        workflow = _workflow_manager.get_workflow_status(workflow_id)
+        workflow = get_workflow_manager().get_workflow_status(workflow_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
 

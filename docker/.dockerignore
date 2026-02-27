@@ -1,0 +1,13 @@
+.env
+.git
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+data/
+*.db
+docker/
+terraform/
+scripts/
+tests/
+.venv/
