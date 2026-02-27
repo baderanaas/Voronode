@@ -39,7 +39,7 @@ class TestPromptManager:
         )
 
         assert "What invoices do we have?" in result
-        assert "Conversation History:" in result
+        assert "Conversation History (most recent last):" in result
 
     def test_render_retry_template(self):
         """Test rendering retry_with_feedback template."""

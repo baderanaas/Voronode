@@ -183,10 +183,12 @@ class CypherQueryTool:
                 logger.warning("unexpected_response_format", response=response)
                 if isinstance(response, dict):
                     cypher = (
-                        response.get("query") or
-                        response.get("cypher") or
-                        response.get("cypher_query") or
-                        list(response.values())[0] if response else ""
+                        response.get("query")
+                        or response.get("cypher")
+                        or response.get("cypher_query")
+                        or list(response.values())[0]
+                        if response
+                        else ""
                     )
                 else:
                     cypher = str(response)
@@ -212,7 +214,7 @@ class CypherQueryTool:
         Uses Neo4j parameterized queries so the user_id value is never concatenated
         into the query string (prevents injection). Returns the modified query and
         the parameters dict to pass to run_query().
-        """
+        """ 
         params: dict = {}
 
         # Find all (alias:Label) patterns for user-scoped node types
@@ -228,18 +230,23 @@ class CypherQueryTool:
         params["_user_id"] = user_id
         conditions = " AND ".join(f"{a}.user_id = $_user_id" for a in sorted(aliases))
 
-        # Inject after the first WHERE keyword if present; otherwise insert before
-        # the first RETURN / WITH / ORDER / LIMIT keyword.
+        first_with = re.search(r"\bWITH\b", cypher, re.IGNORECASE)
+        boundary = first_with.start() if first_with else len(cypher)
+
         where_m = re.search(r"\bWHERE\b", cypher, re.IGNORECASE)
-        if where_m:
+        if where_m and where_m.start() < boundary:
             pos = where_m.end()
             cypher = cypher[:pos] + f" {conditions} AND" + cypher[pos:]
         else:
-            for keyword in ("RETURN", "WITH", "ORDER", "LIMIT"):
-                kw_m = re.search(rf"\b{keyword}\b", cypher, re.IGNORECASE)
-                if kw_m:
-                    pos = kw_m.start()
-                    cypher = cypher[:pos] + f"WHERE {conditions} " + cypher[pos:]
-                    break
+            if first_with:
+                pos = boundary
+            else:
+                pos = len(cypher)
+                for keyword in ("RETURN", "ORDER", "LIMIT"):
+                    kw_m = re.search(rf"\b{keyword}\b", cypher, re.IGNORECASE)
+                    if kw_m:
+                        pos = kw_m.start()
+                        break
+            cypher = cypher[:pos] + f"WHERE {conditions} " + cypher[pos:]
 
         return cypher, params
