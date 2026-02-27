@@ -129,7 +129,7 @@ async def chat(
             )
 
             # Files only — return upload result immediately
-            if not message.strip() and not prompt_intent:
+            if not original_message.strip():
                 # Persist file-only upload as a clean conversation turn
                 if conversation_id and uploaded_filenames and upload_summary:
                     synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"
@@ -441,7 +441,7 @@ async def chat_stream(
                         )
                         yield f"data: {event.model_dump_json()}\n\n"
 
-            if not message.strip() and not prompt_intent:
+            if not original_message.strip():
                 # Persist file-only upload as a clean conversation turn
                 if conversation_id and uploaded_filenames and upload_summary:
                     synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"

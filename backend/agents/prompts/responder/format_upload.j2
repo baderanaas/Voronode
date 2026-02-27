@@ -1,0 +1,26 @@
+Summarize the results of a document ingestion operation for the user.
+
+The user uploaded one or more documents. The system processed each one and returned
+the following structured results. Write a clear, specific confirmation message that
+tells the user exactly what was ingested — mention document IDs, amounts, contractor
+names, project names, anomalies, or any other key fields that are present.
+
+Upload Results:
+{{ results }}
+
+Guidelines:
+- One paragraph or bullet per document processed
+- For each successful step, mention the specific identifiers and values returned
+  (e.g. invoice number, contract ID, amount, contractor, project, cost codes)
+- For failed steps, explain what went wrong briefly
+- If anomalies or warnings are present, flag them clearly
+- Use markdown: **bold** for IDs and amounts, ⚠️ for issues, ✅ for successes
+- Never invent data that is not in the results
+- Keep it concise — this is a confirmation, not an analysis
+
+Respond in JSON:
+{
+    "response": "<markdown confirmation message>",
+    "display_format": "text",
+    "data": null
+}

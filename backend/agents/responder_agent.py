@@ -9,6 +9,7 @@ import structlog
 from typing import Dict, Any
 
 from backend.services.llm_client import OpenAIClient
+from backend.agents.prompts.prompt_manager import render_prompt
 
 logger = structlog.get_logger()
 
@@ -167,6 +168,30 @@ class ResponderAgent:
             "responder_formatted",
             format=result.get("display_format"),
             has_data=bool(result.get("data")),
+        )
+
+        return result
+
+    def format_upload_response(self, execution_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Format upload tool results into a specific, data-rich confirmation using an LLM.
+
+        Uses a dedicated prompt that understands InvoiceUploadTool / ContractUploadTool /
+        BudgetUploadTool result structures, so the LLM can mention real IDs, amounts,
+        contractor names, anomalies, etc. rather than treating them as generic query rows.
+        """
+        logger.info("responder_formatting_upload")
+
+        prompt = render_prompt(
+            "responder/format_upload.j2",
+            results=execution_results.get("results", []),
+        )
+
+        result = self.llm.extract_json(prompt, temperature=0.2)
+
+        logger.info(
+            "responder_upload_formatted",
+            steps=len(execution_results.get("results", [])),
         )
 
         return result

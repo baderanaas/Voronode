@@ -298,6 +298,10 @@ def responder_node(state: ConversationState) -> ConversationState:
             state["planner_output"].get("response", "")
         )
 
+    elif state["route"] == "upload_plan":
+        # Upload confirmations use a dedicated prompt that understands tool result fields
+        formatted = responder.format_upload_response(state["execution_results"])
+
     else:
         # Check if validation failed after max retries
         retry_count = state.get("retry_count", 0)
