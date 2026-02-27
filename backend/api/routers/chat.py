@@ -19,7 +19,6 @@ from backend.memory.mem0_client import Mem0Client
 router = APIRouter(tags=["chat"])
 logger = structlog.get_logger()
 
-
 # ── Non-streaming ──────────────────────────────────────────────────────────────
 
 

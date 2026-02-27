@@ -184,12 +184,25 @@ if st.session_state.pending_input is not None:
         n_files = len(pi["pending_files"])
         initial_label = f"Processing {n_files} file(s)..." if n_files else "Thinking..."
         stage_placeholder = st.empty()
+        response_container = st.empty()
         stage_placeholder.markdown(f"_{initial_label}_")
 
         response_text = ""
         display_format = "text"
         display_data = None
         processing_time = None
+        response_rendered = [False]
+
+        def _render_response():
+            stage_placeholder.empty()
+            with response_container.container():
+                render_assistant_message({
+                    "role": "assistant",
+                    "content": response_text,
+                    "display_format": display_format,
+                    "display_data": display_data,
+                })
+            response_rendered[0] = True
 
         try:
             for event in api.stream(
@@ -210,20 +223,22 @@ if st.session_state.pending_input is not None:
                 elif etype == "upload_agent":
                     stage_placeholder.markdown("_Saving to graph..._")
                 elif etype == "upload_summary":
-                    stage_placeholder.markdown("_Formatting..._")
                     response_text = data.get("response", response_text)
                     display_format = data.get("display_format", "text")
                     display_data = data.get("display_data")
+                    _render_response()
                 elif etype == "executor":
                     stage_placeholder.markdown("_Querying data..._")
+                elif etype == "planner_react":
+                    stage_placeholder.markdown("_Planning next step..._")
                 elif etype == "validator":
                     stage_placeholder.markdown("_Reviewing answer..._")
                 elif etype == "responder":
-                    stage_placeholder.markdown("_Formatting..._")
                     response_text = data.get("response", response_text)
                     if data.get("display_data") is not None:
                         display_format = data.get("display_format", "text")
                         display_data = data.get("display_data")
+                    _render_response()
                 elif etype == "complete":
                     processing_time = data.get("processing_time_seconds")
                 elif etype == "error":
@@ -236,14 +251,16 @@ if st.session_state.pending_input is not None:
                     st.session_state.pending_input = None
                     st.rerun()
 
-            stage_placeholder.empty()
+            # Fallback: render if responder event was never received
+            if not response_rendered[0]:
+                _render_response()
+
             assistant_msg = {
                 "role": "assistant",
                 "content": response_text,
                 "display_format": display_format,
                 "display_data": display_data,
             }
-            render_assistant_message(assistant_msg)
             st.session_state.chat_messages.append(assistant_msg)
             if processing_time is not None:
                 st.caption(f"⏱️ {processing_time:.2f}s")
