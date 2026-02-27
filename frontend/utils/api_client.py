@@ -119,21 +119,9 @@ class APIClient:
 
     # Analytics
     @st.cache_data(ttl=60)
-    def get_processing_metrics(_self) -> Dict[str, Any]:
-        """Get invoice processing metrics and statistics."""
-        response = _self._request("GET", "/api/analytics/metrics")
-        return response.json()
-
-    @st.cache_data(ttl=60)
-    def get_anomaly_distribution(_self) -> Dict[str, Any]:
-        """Get distribution of anomaly types."""
-        response = _self._request("GET", "/api/analytics/anomalies")
-        return response.json()
-
-    @st.cache_data(ttl=60)
-    def get_risk_trends(_self, days: int = 30) -> Dict[str, Any]:
-        """Get risk trends over time."""
-        response = _self._request("GET", f"/api/analytics/trends?days={days}")
+    def get_analytics_dashboard(_self) -> Dict[str, Any]:
+        """Get all analytics dashboard data in one request."""
+        response = _self._request("GET", "/api/analytics/dashboard")
         return response.json()
 
     # Invoice Data

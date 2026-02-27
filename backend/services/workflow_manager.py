@@ -22,7 +22,7 @@ class WorkflowManager:
         self.store = WorkflowStore()
         logger.info("workflow_manager_initialized")
 
-    def execute_sync(self, pdf_path: Path, document_type: str = "invoice") -> Dict[str, Any]:
+    def execute_sync(self, pdf_path: Path, document_type: str = "invoice", user_id: str = "default_user") -> Dict[str, Any]:
         """
         Execute workflow synchronously (blocking).
 
@@ -98,7 +98,7 @@ class WorkflowManager:
                 final_state["current_node"] = current_node
 
                 # Persist final state
-                self.store.save_workflow(document_id, final_state)
+                self.store.save_workflow(document_id, final_state, user_id=user_id)
 
             # Calculate total processing time
             processing_time_ms = int((time.time() - start_time) * 1000)
@@ -136,7 +136,7 @@ class WorkflowManager:
                 "processing_time_ms": processing_time_ms,
             }
 
-            self.store.save_workflow(document_id, error_state)
+            self.store.save_workflow(document_id, error_state, user_id=user_id)
 
             logger.error(
                 "workflow_execution_failed",
@@ -147,7 +147,7 @@ class WorkflowManager:
             return error_state
 
     def resume_workflow(
-        self, document_id: str, human_feedback: Dict[str, Any]
+        self, document_id: str, human_feedback: Dict[str, Any], user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Resume paused workflow with human corrections.
@@ -170,6 +170,10 @@ class WorkflowManager:
 
         if not stored:
             raise ValueError(f"Workflow not found: {document_id}")
+
+        stored_user_id = stored.get("user_id")
+        if user_id and stored_user_id and stored_user_id != user_id:
+            raise PermissionError(f"Workflow {document_id} does not belong to this user")
 
         state = stored["state"]
 
@@ -224,8 +228,8 @@ class WorkflowManager:
                 final_state["document_id"] = document_id
                 final_state["current_node"] = current_node
 
-                # Save final state
-                self.store.save_workflow(document_id, final_state)
+                # Save final state (preserve original owner)
+                self.store.save_workflow(document_id, final_state, user_id=stored_user_id)
 
                 logger.info(
                     "workflow_resume_complete",
@@ -260,7 +264,7 @@ class WorkflowManager:
                 ],
             }
 
-            self.store.save_workflow(document_id, error_state)
+            self.store.save_workflow(document_id, error_state, user_id=stored_user_id)
 
             return error_state
 
@@ -276,42 +280,47 @@ class WorkflowManager:
         """
         return self.store.get_workflow(document_id)
 
-    def get_quarantined_workflows(self) -> List[Dict[str, Any]]:
+    def get_quarantined_workflows(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Get all workflows awaiting human review.
+        Get all workflows awaiting human review, scoped to the given user.
+
+        Args:
+            user_id: When provided, only return workflows owned by this user.
 
         Returns:
             List of quarantined workflow states
         """
-        return self.store.get_all_quarantined()
+        return self.store.get_all_quarantined(user_id=user_id)
 
-    def get_workflows_by_status(self, status: str) -> List[Dict[str, Any]]:
+    def get_workflows_by_status(self, status: str, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Get all workflows with a specific status.
+        Get all workflows with a specific status, scoped to the given user.
 
         Args:
             status: Workflow status
+            user_id: When provided, only return workflows owned by this user.
 
         Returns:
             List of workflow states
         """
-        return self.store.get_all_by_status(status)
+        return self.store.get_all_by_status(status, user_id=user_id)
 
-    def list_workflows(self, status: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def list_workflows(self, status: Optional[str] = None, limit: int = 100, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        List all workflows, optionally filtered by status.
+        List all workflows, optionally filtered by status and owner.
 
         Args:
             status: Optional status filter
             limit: Maximum number of workflows to return
+            user_id: When provided, only return workflows owned by this user.
 
         Returns:
             List of workflow states
         """
         if status:
-            workflows = self.store.get_all_by_status(status)
+            workflows = self.store.get_all_by_status(status, user_id=user_id)
         else:
-            workflows = self.store.get_all_workflows()
+            workflows = self.store.get_all_workflows(user_id=user_id)
 
         # Sort by created_at descending (newest first)
         workflows.sort(key=lambda w: w.get("created_at", ""), reverse=True)

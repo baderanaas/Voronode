@@ -22,11 +22,12 @@ _workflow_manager = WorkflowManager()
 
 
 @router.get("/quarantined", response_model=List[QuarantinedWorkflowResponse])
-async def get_quarantined_workflows(_: dict = Depends(get_current_user)):
+async def get_quarantined_workflows(current_user: dict = Depends(get_current_user)):
     """Get all workflows awaiting human review."""
-    logger.info("quarantined_workflows_requested")
+    user_id = current_user["id"]
+    logger.info("quarantined_workflows_requested", user_id=user_id)
     try:
-        workflows = _workflow_manager.get_quarantined_workflows()
+        workflows = _workflow_manager.get_quarantined_workflows(user_id=user_id)
         responses = []
         for wf in workflows:
             state = wf["state"]
@@ -53,12 +54,18 @@ async def get_quarantined_workflows(_: dict = Depends(get_current_user)):
 
 
 @router.post("/{document_id}/resume", response_model=InvoiceUploadResponse)
-async def resume_workflow(document_id: str, request: WorkflowResumeRequest, _: dict = Depends(get_current_user)):
+async def resume_workflow(
+    document_id: str,
+    request: WorkflowResumeRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Resume a quarantined workflow with human feedback."""
+    user_id = current_user["id"]
     logger.info(
         "workflow_resume_requested",
         document_id=document_id,
         approved=request.approved,
+        user_id=user_id,
     )
     try:
         human_feedback = {
@@ -66,7 +73,9 @@ async def resume_workflow(document_id: str, request: WorkflowResumeRequest, _: d
             "corrections": request.corrections or {},
             "notes": request.notes,
         }
-        final_state = _workflow_manager.resume_workflow(document_id, human_feedback)
+        final_state = _workflow_manager.resume_workflow(
+            document_id, human_feedback, user_id=user_id
+        )
         extracted_data = final_state.get("extracted_data", {})
         anomaly_dicts = final_state.get("anomalies", [])
         return InvoiceUploadResponse(
@@ -87,19 +96,28 @@ async def resume_workflow(document_id: str, request: WorkflowResumeRequest, _: d
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         logger.error("workflow_resume_failed", document_id=document_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to resume workflow: {e}")
 
 
 @router.get("/{document_id}/status", response_model=WorkflowStatusResponse)
-async def get_workflow_status(document_id: str, _: dict = Depends(get_current_user)):
+async def get_workflow_status(
+    document_id: str, current_user: dict = Depends(get_current_user)
+):
     """Get current workflow status."""
-    logger.info("workflow_status_requested", document_id=document_id)
+    user_id = current_user["id"]
+    logger.info("workflow_status_requested", document_id=document_id, user_id=user_id)
     try:
         workflow = _workflow_manager.get_workflow_status(document_id)
         if not workflow:
             raise HTTPException(status_code=404, detail="Workflow not found")
+
+        stored_uid = workflow.get("user_id")
+        if stored_uid and stored_uid != user_id:
+            raise HTTPException(status_code=403, detail="Workflow not found")
         return WorkflowStatusResponse(
             document_id=workflow["document_id"],
             status=workflow["status"],
@@ -120,23 +138,37 @@ async def get_workflow_status(document_id: str, _: dict = Depends(get_current_us
 
 
 @router.get("")
-async def list_workflows(status: Optional[str] = None, limit: int = 100, _: dict = Depends(get_current_user)):
+async def list_workflows(
+    status: Optional[str] = None,
+    limit: int = 100,
+    current_user: dict = Depends(get_current_user),
+):
     """List all workflows, optionally filtered by status."""
-    logger.info("workflows_list_requested", status=status, limit=limit)
+    user_id = current_user["id"]
+    logger.info("workflows_list_requested", status=status, limit=limit, user_id=user_id)
     try:
-        return _workflow_manager.list_workflows(status=status, limit=limit)
+        return _workflow_manager.list_workflows(
+            status=status, limit=limit, user_id=user_id
+        )
     except Exception as e:
         logger.error("workflows_list_failed", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to list workflows: {e}")
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str, _: dict = Depends(get_current_user)):
+async def get_workflow(
+    workflow_id: str, current_user: dict = Depends(get_current_user)
+):
     """Get detailed workflow information by ID."""
-    logger.info("workflow_get_requested", workflow_id=workflow_id)
+    user_id = current_user["id"]
+    logger.info("workflow_get_requested", workflow_id=workflow_id, user_id=user_id)
     try:
         workflow = _workflow_manager.get_workflow_status(workflow_id)
         if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+        stored_uid = workflow.get("user_id")
+        if stored_uid and stored_uid != user_id:
             raise HTTPException(status_code=404, detail="Workflow not found")
         return workflow
     except HTTPException:

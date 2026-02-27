@@ -23,6 +23,7 @@ st.markdown("Visualize relationships in the knowledge graph.")
 
 # Initialize API client
 api = APIClient()
+api.token = st.session_state.get("token")
 
 
 def format_neo4j_value(value):
@@ -241,7 +242,7 @@ with tab1:
 
     query_options = {
         "All Invoices with Contracts": """
-            MATCH (i:Invoice)-[r:BELONGS_TO]->(c:Contract)
+            MATCH (i:Invoice)-[r:BILLED_AGAINST]->(c:Contract)
             RETURN i, r, c
             LIMIT 50
         """,

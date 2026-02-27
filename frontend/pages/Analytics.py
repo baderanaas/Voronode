@@ -1,591 +1,218 @@
 """
 Analytics Dashboard
 
-Processing metrics, trends, and anomaly distribution.
+Pre-built dashboards for budget variance, contractor spend, and invoice aging.
+All data is scoped to the authenticated user.
 """
 
-import streamlit as st
 import sys
 from pathlib import Path
-import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
-from collections import Counter
 
-# Add paths
+import plotly.graph_objects as go
+import streamlit as st
+
 frontend_path = Path(__file__).parent.parent
 sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
-from utils.formatters import format_currency, format_duration, format_datetime
+from utils.formatters import format_currency
 
-st.title("📊 Analytics Dashboard")
-st.markdown("Processing metrics, trends, and insights.")
+st.title("Analytics Dashboard")
+st.markdown("Budget variance, contractor spend, and invoice aging — scoped to your data.")
 
-# Initialize API client
 api = APIClient()
+api.token = st.session_state.get("token")
 
-# Refresh button
-if st.button("🔄 Refresh Data"):
+if st.button("Refresh"):
     api.clear_cache()
     st.rerun()
 
-st.markdown("---")
+st.divider()
 
-# Get data
+# ── Load data ─────────────────────────────────────────────────────────────────
 try:
-    workflows = api.list_workflows()
-    graph_stats = api.get_graph_stats()
+    data = api.get_analytics_dashboard()
 except Exception as e:
-    st.error(f"Failed to load data: {e}")
+    st.error(f"Failed to load analytics: {e}")
     st.stop()
 
-# Processing Metrics
-st.markdown("## ⚙️ Processing Metrics")
+summary = data.get("summary", {})
+contractor_spend = data.get("contractor_spend", [])
+invoice_aging = data.get("invoice_aging", {})
+budget_summary = data.get("budget_summary", [])
 
+# ── Summary KPIs ──────────────────────────────────────────────────────────────
 col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Invoices", summary.get("total_invoices", 0))
+col2.metric("Total Invoice Value", format_currency(summary.get("total_invoice_value", 0)))
+col3.metric("Contractors", summary.get("contractor_count", 0))
+col4.metric("Budgets", summary.get("budget_count", 0))
 
-# Calculate metrics
-total_workflows = len(workflows)
-completed = sum(1 for w in workflows if w.get("status") == "completed")
-quarantined = sum(1 for w in workflows if w.get("status") == "quarantined")
-failed = sum(1 for w in workflows if w.get("status") == "failed")
+st.divider()
 
-success_rate = (completed / total_workflows * 100) if total_workflows > 0 else 0
-quarantine_rate = (quarantined / total_workflows * 100) if total_workflows > 0 else 0
+# ── Budget Variance ───────────────────────────────────────────────────────────
+st.subheader("Budget Variance by Project")
 
-with col1:
-    st.metric("Total Workflows", total_workflows)
+if budget_summary:
+    projects = [b["project_name"] for b in budget_summary]
+    allocated = [b["total_allocated"] for b in budget_summary]
+    spent = [b["total_spent"] for b in budget_summary]
+    variance_pcts = [b["variance_pct"] for b in budget_summary]
 
-with col2:
-    st.metric("Success Rate", f"{success_rate:.1f}%")
+    # Colour spent bars: red = over budget, green = under
+    spent_colors = ["#DC143C" if v > 0 else "#50C878" for v in variance_pcts]
 
-with col3:
-    st.metric("Quarantine Rate", f"{quarantine_rate:.1f}%", delta=f"{quarantined} items")
+    fig = go.Figure()
+    fig.add_trace(go.Bar(name="Allocated", x=projects, y=allocated, marker_color="#4A90E2"))
+    fig.add_trace(go.Bar(name="Spent", x=projects, y=spent, marker_color=spent_colors))
+    fig.update_layout(
+        barmode="group",
+        xaxis_title="Project",
+        yaxis_title="Amount ($)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=30),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-with col4:
-    st.metric("Failed", failed)
+    # Variance summary table
+    import pandas as pd
 
-st.markdown("---")
+    df = pd.DataFrame(
+        [
+            {
+                "Project": b["project_name"],
+                "Allocated": b["total_allocated"],
+                "Spent": b["total_spent"],
+                "Variance $": b["variance_amount"],
+                "Variance %": b["variance_pct"],
+                "Status": "Over" if b["variance_pct"] > 0 else "Under",
+            }
+            for b in budget_summary
+        ]
+    )
+    st.dataframe(
+        df.style.format(
+            {
+                "Allocated": "${:,.0f}",
+                "Spent": "${:,.0f}",
+                "Variance $": "${:,.0f}",
+                "Variance %": "{:.1f}%",
+            }
+        ).map(
+            lambda v: "color: #DC143C" if v == "Over" else "color: #50C878",
+            subset=["Status"],
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
-# Status Distribution
-st.markdown("## 📊 Workflow Status Distribution")
+    # Cost-code drilldown (expander per project)
+    for b in budget_summary:
+        if not b["lines"]:
+            continue
+        with st.expander(f"{b['project_name']} — cost code breakdown"):
+            line_df = pd.DataFrame(b["lines"])
+            st.dataframe(
+                line_df.style.format(
+                    {
+                        "allocated": "${:,.0f}",
+                        "spent": "${:,.0f}",
+                        "variance_amount": "${:,.0f}",
+                        "variance_pct": "{:.1f}%",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+else:
+    st.info("No budget data available. Upload a budget file to see variance analysis.")
 
-status_counts = Counter(w.get("status", "unknown") for w in workflows)
+st.divider()
 
-if status_counts:
-    fig = px.pie(
-        values=list(status_counts.values()),
-        names=list(status_counts.keys()),
-        title="Workflow Status Distribution",
-        color_discrete_map={
-            "completed": "#50C878",
-            "quarantined": "#FFA500",
-            "failed": "#DC143C",
-            "processing": "#4A90E2",
-        },
+# ── Contractor Spend ──────────────────────────────────────────────────────────
+st.subheader("Contractor Spend")
+
+if contractor_spend:
+    names = [r["contractor"] for r in contractor_spend]
+    totals = [r["total_spend"] for r in contractor_spend]
+    counts = [r["invoice_count"] for r in contractor_spend]
+
+    fig = go.Figure(
+        go.Bar(
+            x=totals,
+            y=names,
+            orientation="h",
+            marker_color="#4A90E2",
+            text=[f"{format_currency(t)} ({c} inv.)" for t, c in zip(totals, counts)],
+            textposition="outside",
+        )
+    )
+    fig.update_layout(
+        xaxis_title="Total Spend ($)",
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=10, r=120, t=20, b=40),
+        height=max(300, len(names) * 40),
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
-    st.info("No workflow data available")
+    st.info("No contractor spend data available. Upload invoices to see this dashboard.")
 
-st.markdown("---")
+st.divider()
 
-# Anomaly Analysis
-st.markdown("## ⚠️ Anomaly Analysis")
+# ── Invoice Aging ─────────────────────────────────────────────────────────────
+st.subheader("Invoice Aging")
 
-try:
-    # Collect all anomalies from workflows
-    all_anomalies = []
+buckets = invoice_aging.get("buckets", {})
+amounts = invoice_aging.get("amounts", {})
+bucket_labels = ["0-30", "31-60", "61-90", "90+"]
+bucket_colors = ["#50C878", "#FFD700", "#FFA500", "#DC143C"]
 
-    for workflow in workflows:
-        try:
-            details = api.get_workflow(workflow.get("document_id"))
-            anomalies = details.get("state", {}).get("anomalies", [])
-            all_anomalies.extend(anomalies)
-        except:
-            pass
+if any(buckets.get(b, 0) > 0 for b in bucket_labels):
+    col_count, col_amount = st.columns(2)
 
-    if all_anomalies:
-        # Anomaly count
-        st.metric("Total Anomalies Detected", len(all_anomalies))
-
-        # Anomaly type distribution
-        anomaly_types = Counter(a.get("type", "unknown") for a in all_anomalies)
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            # Bar chart
-            fig = px.bar(
-                x=list(anomaly_types.keys()),
-                y=list(anomaly_types.values()),
-                title="Anomaly Type Frequency",
-                labels={"x": "Anomaly Type", "y": "Count"},
-                color=list(anomaly_types.values()),
-                color_continuous_scale="reds",
+    with col_count:
+        fig = go.Figure(
+            go.Bar(
+                x=bucket_labels,
+                y=[buckets.get(b, 0) for b in bucket_labels],
+                marker_color=bucket_colors,
+                text=[buckets.get(b, 0) for b in bucket_labels],
+                textposition="outside",
             )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            # Severity distribution
-            severity_counts = Counter(a.get("severity", "unknown") for a in all_anomalies)
-
-            fig = px.pie(
-                values=list(severity_counts.values()),
-                names=list(severity_counts.keys()),
-                title="Severity Distribution",
-                color_discrete_map={
-                    "low": "#90EE90",
-                    "medium": "#FFD700",
-                    "high": "#FF6B6B",
-                    "critical": "#DC143C",
-                },
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # Top anomalies
-        st.markdown("### Most Common Anomalies")
-
-        for anomaly_type, count in anomaly_types.most_common(5):
-            formatted_type = anomaly_type.replace("_", " ").title()
-            st.text(f"{formatted_type}: {count} occurrences")
-
-    else:
-        st.success("✅ No anomalies detected across all workflows!")
-
-except Exception as e:
-    st.error(f"Failed to analyze anomalies: {e}")
-
-st.markdown("---")
-
-# Processing Time Analysis
-st.markdown("## ⏱️ Processing Time Analysis")
-
-try:
-    # Calculate processing times (if we have timestamps)
-    processing_times = []
-
-    for workflow in workflows:
-        try:
-            details = api.get_workflow(workflow.get("document_id"))
-            timeline = details.get("timeline", [])
-
-            if len(timeline) >= 2:
-                start_time = datetime.fromisoformat(
-                    timeline[0].get("timestamp").replace("Z", "+00:00")
-                )
-                end_time = datetime.fromisoformat(
-                    timeline[-1].get("timestamp").replace("Z", "+00:00")
-                )
-                duration = (end_time - start_time).total_seconds()
-                processing_times.append(duration)
-        except:
-            pass
-
-    if processing_times:
-        avg_time = sum(processing_times) / len(processing_times)
-        min_time = min(processing_times)
-        max_time = max(processing_times)
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric("Average Time", format_duration(avg_time))
-
-        with col2:
-            st.metric("Fastest", format_duration(min_time))
-
-        with col3:
-            st.metric("Slowest", format_duration(max_time))
-
-        # Histogram
-        fig = px.histogram(
-            x=processing_times,
-            nbins=20,
-            title="Processing Time Distribution",
-            labels={"x": "Time (seconds)", "y": "Count"},
+        )
+        fig.update_layout(
+            title="Invoice Count by Age (days)",
+            xaxis_title="Days Since Invoice",
+            yaxis_title="# Invoices",
+            margin=dict(t=40),
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    else:
-        st.info("No processing time data available")
-
-except Exception as e:
-    st.warning(f"Could not calculate processing times: {e}")
-
-st.markdown("---")
-
-# Financial Metrics
-st.markdown("## 💰 Financial Metrics")
-
-try:
-    # Aggregate invoice amounts
-    total_invoice_value = 0
-    invoice_count = 0
-
-    for workflow in workflows:
-        try:
-            details = api.get_workflow(workflow.get("document_id"))
-            invoice_data = details.get("state", {}).get("invoice", {})
-            total_amount = invoice_data.get("total_amount", 0)
-
-            if total_amount:
-                total_invoice_value += float(total_amount)
-                invoice_count += 1
-        except:
-            pass
-
-    if invoice_count > 0:
-        avg_invoice_value = total_invoice_value / invoice_count
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric("Total Invoice Value", format_currency(total_invoice_value))
-
-        with col2:
-            st.metric("Processed Invoices", invoice_count)
-
-        with col3:
-            st.metric("Average Invoice", format_currency(avg_invoice_value))
-
-        # Invoice value distribution
-        invoice_amounts = []
-
-        for workflow in workflows:
-            try:
-                details = api.get_workflow(workflow.get("document_id"))
-                invoice_data = details.get("state", {}).get("invoice", {})
-                total_amount = invoice_data.get("total_amount", 0)
-
-                if total_amount:
-                    invoice_amounts.append(float(total_amount))
-            except:
-                pass
-
-        if invoice_amounts:
-            fig = px.histogram(
-                x=invoice_amounts,
-                nbins=20,
-                title="Invoice Amount Distribution",
-                labels={"x": "Amount ($)", "y": "Count"},
+    with col_amount:
+        fig = go.Figure(
+            go.Bar(
+                x=bucket_labels,
+                y=[amounts.get(b, 0) for b in bucket_labels],
+                marker_color=bucket_colors,
+                text=[format_currency(amounts.get(b, 0)) for b in bucket_labels],
+                textposition="outside",
             )
-            st.plotly_chart(fig, use_container_width=True)
-
-    else:
-        st.info("No financial data available")
-
-except Exception as e:
-    st.warning(f"Could not calculate financial metrics: {e}")
-
-st.markdown("---")
-
-# Budget Variance Analysis
-st.markdown("## 💰 Budget Variance Analysis")
-
-try:
-    # Get all projects with budgets
-    projects = graph_stats.get("projects", [])
-
-    if not projects:
-        # If projects not in graph_stats, try to get from budgets
-        st.info("Loading budget data...")
-
-    # Collect budget variance data across all projects
-    all_variances = []
-    project_summaries = []
-
-    # Get list of projects (simplified - would ideally come from graph_stats)
-    # For now, try common project IDs
-    test_project_ids = ["PRJ-001", "PRJ-002", "PRJ-003"]
-
-    for project_id in test_project_ids:
-        try:
-            project_budgets = api.get_project_budgets(project_id)
-
-            if project_budgets and project_budgets.get("budgets"):
-                for budget in project_budgets["budgets"]:
-                    budget_id = budget.get("id")
-
-                    # Get variance details
-                    variance = api.get_budget_variance(budget_id)
-
-                    if variance:
-                        project_summaries.append({
-                            "Project": budget.get("project_name", project_id),
-                            "Budget ID": budget_id,
-                            "Total Allocated": budget.get("total_allocated", 0),
-                            "Total Spent": budget.get("total_spent", 0),
-                            "Variance %": variance.get("overall_variance", 0),
-                            "Variance $": variance.get("overall_variance_amount", 0),
-                            "Overruns": len(variance.get("overrun_lines", [])),
-                            "At Risk": len(variance.get("at_risk_lines", [])),
-                        })
-
-                        all_variances.extend(variance.get("line_variances", []))
-        except:
-            pass
-
-    if project_summaries:
-        st.success(f"✅ Loaded budget data for {len(project_summaries)} project(s)")
-
-        # Overall metrics
-        col1, col2, col3, col4 = st.columns(4)
-
-        total_allocated = sum(p["Total Allocated"] for p in project_summaries)
-        total_spent = sum(p["Total Spent"] for p in project_summaries)
-        total_variance = ((total_spent - total_allocated) / total_allocated * 100) if total_allocated > 0 else 0
-        total_overruns = sum(p["Overruns"] for p in project_summaries)
-
-        with col1:
-            st.metric("Total Budget", format_currency(total_allocated))
-
-        with col2:
-            st.metric("Total Spent", format_currency(total_spent))
-
-        with col3:
-            variance_color = "🔴" if total_variance > 10 else ("🟡" if total_variance > 0 else "🟢")
-            st.metric(
-                "Overall Variance",
-                f"{variance_color} {total_variance:.2f}%",
-                delta=format_currency(total_spent - total_allocated)
-            )
-
-        with col4:
-            st.metric("Budget Overruns", total_overruns)
-
-        # Project summary table
-        st.markdown("### Budget Summary by Project")
-
-        import pandas as pd
-        df_summary = pd.DataFrame(project_summaries)
-
-        st.dataframe(
-            df_summary.style.format({
-                "Total Allocated": "${:,.2f}",
-                "Total Spent": "${:,.2f}",
-                "Variance %": "{:.2f}%",
-                "Variance $": "${:,.2f}",
-            }),
-            use_container_width=True,
         )
-
-        # Variance distribution across all cost codes
-        if all_variances:
-            st.markdown("### Cost Code Variance Distribution")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                # Top overruns
-                sorted_variances = sorted(
-                    all_variances,
-                    key=lambda x: x.get("variance_amount", 0),
-                    reverse=True
-                )
-
-                top_overruns = [v for v in sorted_variances if v.get("variance_amount", 0) > 0][:10]
-
-                if top_overruns:
-                    st.markdown("**Top 10 Overruns**")
-
-                    overrun_df = pd.DataFrame([
-                        {
-                            "Cost Code": v["cost_code"],
-                            "Description": v["description"][:30] + "..." if len(v["description"]) > 30 else v["description"],
-                            "Variance": v["variance_amount"],
-                            "Variance %": v["variance_percent"],
-                        }
-                        for v in top_overruns
-                    ])
-
-                    st.dataframe(
-                        overrun_df.style.format({
-                            "Variance": "${:,.2f}",
-                            "Variance %": "{:.1f}%",
-                        }),
-                        use_container_width=True,
-                    )
-
-            with col2:
-                # Top underruns (under budget)
-                top_underruns = [v for v in sorted_variances if v.get("variance_amount", 0) < 0][:10]
-
-                if top_underruns:
-                    st.markdown("**Top 10 Under Budget**")
-
-                    underrun_df = pd.DataFrame([
-                        {
-                            "Cost Code": v["cost_code"],
-                            "Description": v["description"][:30] + "..." if len(v["description"]) > 30 else v["description"],
-                            "Remaining": abs(v["variance_amount"]),
-                            "Utilization %": v["utilization_percent"],
-                        }
-                        for v in top_underruns
-                    ])
-
-                    st.dataframe(
-                        underrun_df.style.format({
-                            "Remaining": "${:,.2f}",
-                            "Utilization %": "{:.1f}%",
-                        }),
-                        use_container_width=True,
-                    )
-
-            # Variance histogram
-            st.markdown("### Variance Distribution Across All Cost Codes")
-
-            variance_pcts = [v.get("variance_percent", 0) for v in all_variances]
-
-            fig = go.Figure()
-
-            fig.add_trace(go.Histogram(
-                x=variance_pcts,
-                nbinsx=30,
-                marker_color="#4A90E2",
-                name="Cost Codes",
-            ))
-
-            fig.add_vline(
-                x=0,
-                line_dash="dash",
-                line_color="green",
-                annotation_text="On Budget",
-                annotation_position="top right"
-            )
-
-            fig.add_vline(
-                x=10,
-                line_dash="dash",
-                line_color="orange",
-                annotation_text="10% Over",
-                annotation_position="top right"
-            )
-
-            fig.update_layout(
-                title="Budget Variance Distribution",
-                xaxis_title="Variance (%)",
-                yaxis_title="Number of Cost Codes",
-                showlegend=False,
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Utilization analysis
-            st.markdown("### Budget Utilization Analysis")
-
-            utilization_data = []
-            for v in all_variances:
-                util_pct = v.get("utilization_percent", 0)
-
-                if util_pct > 90:
-                    category = "At Risk (>90%)"
-                elif util_pct > 75:
-                    category = "High (75-90%)"
-                elif util_pct > 50:
-                    category = "Medium (50-75%)"
-                elif util_pct > 25:
-                    category = "Low (25-50%)"
-                else:
-                    category = "Minimal (<25%)"
-
-                utilization_data.append(category)
-
-            util_counts = Counter(utilization_data)
-
-            fig = px.pie(
-                values=list(util_counts.values()),
-                names=list(util_counts.keys()),
-                title="Budget Utilization Categories",
-                color_discrete_sequence=["#DC143C", "#FFA500", "#FFD700", "#90EE90", "#4A90E2"],
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-    else:
-        st.info("""
-        **No budget data available**
-
-        Upload budgets via the **Upload Budget** page to see variance analysis here.
-        """)
-
-except Exception as e:
-    st.warning(f"Could not load budget variance data: {e}")
-    import traceback
-    with st.expander("Error Details"):
-        st.code(traceback.format_exc())
-
-st.markdown("---")
-
-# Trend Analysis
-st.markdown("## 📈 Trend Analysis")
-
-try:
-    # Group workflows by date
-    workflow_dates = []
-
-    for workflow in workflows:
-        created_at = workflow.get("created_at")
-        if created_at:
-            try:
-                dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                workflow_dates.append(dt.date())
-            except:
-                pass
-
-    if workflow_dates:
-        date_counts = Counter(workflow_dates)
-
-        # Sort by date
-        sorted_dates = sorted(date_counts.items())
-        dates = [d[0] for d in sorted_dates]
-        counts = [d[1] for d in sorted_dates]
-
-        fig = px.line(
-            x=dates,
-            y=counts,
-            title="Workflow Volume Over Time",
-            labels={"x": "Date", "y": "Workflows"},
-            markers=True,
+        fig.update_layout(
+            title="Invoice Value by Age (days)",
+            xaxis_title="Days Since Invoice",
+            yaxis_title="Amount ($)",
+            margin=dict(t=40),
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    else:
-        st.info("No date data available for trend analysis")
-
-except Exception as e:
-    st.warning(f"Could not generate trend analysis: {e}")
-
-# Sidebar
-with st.sidebar:
-    st.markdown("### 📊 Quick Stats")
-
-    try:
-        st.metric("Total Nodes", graph_stats.get("total_nodes", 0))
-        st.metric("Total Invoices", graph_stats.get("invoice_count", 0))
-        st.metric("Active Projects", graph_stats.get("project_count", 0))
-    except:
-        st.info("Stats unavailable")
-
-    st.markdown("---")
-    st.markdown("### 📅 Date Range")
-
-    if workflows:
-        try:
-            dates = []
-            for w in workflows:
-                created = w.get("created_at")
-                if created:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    dates.append(dt)
-
-            if dates:
-                min_date = min(dates)
-                max_date = max(dates)
-
-                st.text(f"From: {min_date.strftime('%Y-%m-%d')}")
-                st.text(f"To: {max_date.strftime('%Y-%m-%d')}")
-                st.text(f"Days: {(max_date - min_date).days}")
-        except:
-            pass
+    # Aging risk callout
+    overdue_count = buckets.get("61-90", 0) + buckets.get("90+", 0)
+    overdue_value = amounts.get("61-90", 0.0) + amounts.get("90+", 0.0)
+    if overdue_count > 0:
+        st.warning(
+            f"{overdue_count} invoice(s) older than 60 days, "
+            f"totalling **{format_currency(overdue_value)}** — consider follow-up."
+        )
+else:
+    st.info("No invoice data available. Upload invoices to see aging analysis.")

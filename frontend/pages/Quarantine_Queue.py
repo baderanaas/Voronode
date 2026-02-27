@@ -24,6 +24,7 @@ st.markdown("Review and approve invoices that require human oversight.")
 
 # Initialize API client
 api = APIClient()
+api.token = st.session_state.get("token")
 
 # Add refresh button
 col1, col2, col3 = st.columns([1, 1, 4])

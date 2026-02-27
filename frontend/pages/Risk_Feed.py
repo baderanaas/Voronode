@@ -26,6 +26,7 @@ st.markdown("Real-time monitoring of invoice processing and anomaly alerts.")
 
 # Initialize API client
 api = APIClient()
+api.token = st.session_state.get("token")
 
 # Refresh controls
 col1, col2, col3 = st.columns([1, 1, 4])
