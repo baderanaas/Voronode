@@ -1,625 +1,467 @@
-# Voronode - Autonomous Financial Risk & Compliance System
+# Voronode
 
-AI-powered multi-agent system for construction financial oversight using GraphRAG and LangGraph orchestration.
+AI-powered autonomous financial risk and compliance system for construction finance. Combines a multi-agent conversational interface with an automated document ingestion pipeline, backed by a Neo4j knowledge graph and multi-user JWT authentication.
+
+## What it does
+
+- **Chat with your financial data** — ask natural language questions about invoices, contracts, budgets, and contractors; agents query Neo4j or ChromaDB and format results as text, tables, or charts
+- **Upload documents** — drop in PDF invoices, contracts, and budgets; an extraction pipeline structures them with LLMs, validates them, runs compliance audits against contract terms, and inserts them into the knowledge graph
+- **Quarantine queue** — high-risk documents are flagged for human review before entering the graph; reviewers can approve, reject, or correct-and-retry
+- **Multi-user** — JWT authentication with per-user data isolation across Neo4j, ChromaDB, and conversation history
 
 ## Architecture
 
-- **Knowledge Graph:** Neo4j (relationships between projects, invoices, contracts)
-- **Vector Store:** ChromaDB (unstructured document search with embeddings)
-- **LLM:** Groq (llama-3.3-70b for reasoning and extraction)
-- **Orchestration:** LangGraph (conditional workflows with human-in-the-loop)
-- **API:** FastAPI (RESTful endpoints for invoice processing)
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Streamlit Frontend  (port 8501)                                  │
+│  Chat · Analytics · Graph Explorer · Quarantine Queue · Risk Feed │
+└─────────────────────────┬────────────────────────────────────────┘
+                          │  HTTP (JWT Bearer)
+┌─────────────────────────▼────────────────────────────────────────┐
+│  FastAPI Backend  (port 8080)                                     │
+│  /api/auth  /api/chat  /api/conversations  /api/workflows         │
+│  /api/graph  /api/analytics  /api/budgets  /api/health           │
+└──────┬──────────────────┬────────────────────────────────────────┘
+       │                  │
+┌──────▼──────┐    ┌──────▼────────────────────────────────────────┐
+│  Ingestion  │    │  Multi-Agent System  (LangGraph StateGraph)    │
+│  Pipeline   │    │                                                │
+│  Extract    │    │  PlannerAgent   → Gemini 2.5 Pro              │
+│  Validate   │    │  ExecutorAgent  → 13 tools                    │
+│  Audit      │    │  ValidatorAgent → GPT-4o-mini                 │
+│  Insert     │    │  ResponderAgent → GPT-4o-mini                 │
+└──────┬──────┘    └──────────────────────┬─────────────────────────┘
+       │                                  │
+┌──────▼──────────────────────────────────▼─────────────────────────┐
+│  Data Layer                                                        │
+│  Neo4j (knowledge graph)  ·  ChromaDB (vectors)  ·  SQLite (state)│
+└───────────────────────────────────────────────────────────────────┘
+```
 
-## Implementation Status
+### Multi-LLM strategy
 
-### Phase 1: Knowledge Foundation ✅
+| Role | Model | Reason |
+|---|---|---|
+| Planner | Gemini 2.5 Pro | Complex reasoning and routing |
+| Validator / Responder | GPT-4o-mini | Fast, cost-effective formatting |
+| Cypher generation | Claude Haiku 4.5 | Reliable Cypher synthesis |
+| Document extraction | Groq Llama 3.3 70B | High-throughput structured extraction |
 
-- Graph schema defined (Projects, Invoices, Contractors, BudgetLines, etc.)
-- Database infrastructure (Neo4j + ChromaDB via Docker)
-- Core Pydantic models with validation
-- Synthetic test data generation (10 invoice PDFs, 5 contracts, 3 project budgets, 10 contractors)
-- Database client wrappers
+---
 
-### Phase 2: Document Intelligence Agent ✅
-
-- PDF text extraction (pdfplumber + pypdf fallback)
-- LLM-powered invoice structuring with Groq
-- Comprehensive validation (math checks, semantic validation)
-- Neo4j graph insertion with idempotent merges
-- ChromaDB vector embeddings
-- FastAPI endpoints (`/invoices/upload`, `/invoices/{id}`, `/health`)
-- **12 integration tests passing**
-
-### Phase 3: LangGraph Orchestration ✅
-
-- Conditional routing based on risk levels (low/medium/high/critical)
-- Automatic retry logic with critic agent feedback (max 3 retries)
-- Human-in-the-loop workflow pausing for high-risk invoices
-- Complete state persistence with SQLite checkpoints
-- Quarantine management endpoints
-- **26 workflow tests passing** (100% pass rate)
-
-### Phase 4: UI & Compliance Auditor ✅
-
-**Phase 4A: Streamlit Dashboard**
-- 5-page multi-page Streamlit application for financial oversight teams
-- **Risk Feed:** Real-time monitoring of invoice processing and anomaly alerts
-- **Quarantine Queue:** Interactive approve/reject interface with corrections editor
-- **Upload Invoice:** PDF upload with progress tracking and workflow visualization
-- **Graph Explorer:** Neo4j visualization with custom Cypher queries
-- **Analytics:** Processing metrics, trends, and anomaly distribution charts
-- Reusable UI components (invoice cards, anomaly badges, workflow status)
-- API client wrapper with error handling and caching
-
-**Phase 4B: Contract Compliance Auditor**
-- Automated validation of invoices against contract terms
-- **Retention Rate Validation:** Verify retention calculations match contract terms
-- **Unit Price Validation:** Check line items against contract price schedules (5% tolerance)
-- **Billing Cap Enforcement:** Prevent invoices from exceeding contract values
-- **Scope Validation:** Ensure all cost codes are within approved scope
-- Integrated into LangGraph workflow between validation and graph insertion
-- Configurable thresholds for quarantine triggers
-- **15+ compliance tests passing** (>90% coverage)
-
-**Total Tests:** 58+ passing (includes compliance auditor unit tests)
-
-## Quick Start
+## Quick start
 
 ### Prerequisites
 
 - Python 3.12+
 - Docker & Docker Compose
-- Groq API key ([get one here](https://console.groq.com))
-- OpenAI API key (for embeddings)
+- API keys: Groq, OpenAI, Google Gemini, Anthropic
 
-### Installation
+### 1. Clone and configure
 
-1. **Clone and enter directory:**
 ```bash
 git clone <repo-url>
 cd voronode
-```
-
-2. **Create `.env` file:**
-```bash
 cp .env.example .env
+# Edit .env and fill in your API keys
 ```
 
-Add your API keys:
-```bash
-GROQ_API_KEY=gsk_xxx
-OPENAI_API_KEY=sk-xxx
-NEO4J_PASSWORD=voronode123
-```
+### 2. Install dependencies
 
-3. **Install dependencies:**
 ```bash
 uv sync
 ```
 
-4. **Start databases:**
+### 3. Start databases
+
 ```bash
-cd docker
-docker-compose up -d
-cd ..
+cd docker && docker-compose up -d && cd ..
 ```
 
-5. **Initialize schemas:**
+### 4. Initialize schemas
+
 ```bash
 uv run python scripts/setup_neo4j.py
 uv run python scripts/setup_chromadb.py
 ```
 
-6. **Generate test data (optional):**
+### 5. (Optional) Generate test fixtures
+
 ```bash
 uv run python scripts/generate_test_data.py
 ```
-Generates 10 invoice PDFs with JSON metadata, 5 contracts, 3 project budgets, 10 contractors, and 3 projects in `backend/tests/fixtures/`.
 
-### Verify Setup
+Generates 10 invoice PDFs, 5 contracts, 3 budgets, 10 contractors, and 3 projects in `backend/tests/fixtures/`.
 
-```bash
-# Run all tests
-uv run pytest
-
-# Check Neo4j browser: http://localhost:7474
-# User: neo4j, Password: voronode123
-
-# Check ChromaDB: http://localhost:8000/api/v1/heartbeat
-```
-
-## API Usage
-
-### Start the Backend API Server
+### 6. Run backend
 
 ```bash
 uv run uvicorn backend.api.main:app --reload --port 8080
+# Swagger UI: http://localhost:8080/docs
 ```
 
-API docs available at: http://localhost:8080/docs
-
-### Start the Streamlit Dashboard (Phase 4)
+### 7. Run frontend
 
 ```bash
 uv run streamlit run frontend/app.py
+# Dashboard: http://localhost:8501
 ```
 
-Dashboard available at: http://localhost:8501
-
-**Dashboard Features:**
-- Monitor real-time risk alerts and processing metrics
-- Review and approve quarantined invoices through the UI
-- Upload new invoices with visual progress tracking
-- Explore the knowledge graph with interactive visualizations
-- View analytics and trends across all processed invoices
-
-### Upload Invoice (LangGraph Workflow)
-
-**Option 1: Via Streamlit Dashboard (Recommended)**
-1. Navigate to http://localhost:8501
-2. Go to "Upload Invoice" page
-3. Drag and drop PDF or use file picker
-4. Monitor processing in real-time
-5. Review extracted data and anomalies
-
-**Option 2: Via API**
-```bash
-curl -X POST http://localhost:8080/api/upload \
-  -F "file=@invoice.pdf"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "workflow_id": "abc-123",
-  "invoice_number": "INV-2024-0001",
-  "amount": 10000.00,
-  "risk_level": "low",
-  "requires_review": false,
-  "retry_count": 0,
-  "processing_time_seconds": 8.42
-}
-```
-
-### Manage Quarantined Invoices
-
-**Option 1: Via Streamlit Dashboard (Recommended)**
-1. Go to "Quarantine Queue" page
-2. Review anomalies and extracted data
-3. Choose action:
-   - **Approve:** Accept invoice as-is
-   - **Reject:** Mark as invalid with notes
-   - **Correct & Retry:** Edit fields and re-process
-
-**Option 2: Via API**
-
-**Check Quarantine Queue:**
-```bash
-curl http://localhost:8080/api/workflows/quarantined
-```
-
-**Approve Workflow:**
-```bash
-curl -X POST http://localhost:8080/api/workflows/{workflow_id}/resume \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "approve",
-    "notes": "Verified with contractor"
-  }'
-```
-
-**Apply Corrections:**
-```bash
-curl -X POST http://localhost:8080/api/workflows/{workflow_id}/resume \
-  -H "Content-Type: application/json" \
-  -d '{
-    "action": "correct",
-    "corrections": {"total_amount": 10000.00},
-    "notes": "Corrected total amount"
-  }'
-```
-
-**Get Workflow Status:**
-```bash
-curl http://localhost:8080/api/workflows/{workflow_id}
-```
-
-## Workflow Architecture
-
-### LangGraph State Machine (Phase 4 with Compliance Audit)
-
-```
-Upload Invoice
-    ↓
-Extract Text (pdfplumber)
-    ↓
-Structure Invoice (LLM)
-    ├─ Success → Validate
-    ├─ Failure (retry < 3) → Critic Agent → Retry
-    └─ Failure (retry = 3) → Quarantine (Human Review)
-    ↓
-Validate Invoice (Anomaly Detection)
-    ├─ Low Risk → Compliance Audit
-    ├─ Medium Risk (retry < 3) → Critic Agent → Retry
-    └─ High/Critical Risk → Quarantine (Human Review) ⏸️
-    ↓
-Compliance Audit (NEW in Phase 4B)
-    ├─ Clean → Insert Graph → Embed Vector → Complete ✅
-    └─ Violations (Critical/High) → Quarantine (Human Review) ⏸️
-```
-
-**Compliance Checks:**
-1. **Retention Rate:** Invoice retention matches contract terms
-2. **Unit Prices:** Line item prices within contract schedule (±5% tolerance)
-3. **Billing Cap:** Total billing doesn't exceed contract value
-4. **Scope:** All cost codes are approved for this contract
-
-### Risk Level Calculation
-
-| Risk Level | Conditions | Action |
-|------------|-----------|--------|
-| **Low** | 0 high, <3 medium anomalies | Auto-approve → Graph |
-| **Medium** | 1-2 medium anomalies | Retry with critic |
-| **High** | 1 high OR 3+ medium | Quarantine for review |
-| **Critical** | 2+ high anomalies | Quarantine for review |
-
-### Anomaly Types
-
-**Validation Anomalies:**
-- **High Severity:** Math errors, missing fields, total mismatches
-- **Medium Severity:** Future dates, invalid due dates, semantic mismatches
-- **Low Severity:** Invalid invoice number format, minor formatting issues
-
-**Compliance Anomalies (Phase 4B):**
-- **Critical:** Billing cap exceeded by >10%, contract not found
-- **High:** Unit price exceeds contract by >10%, retention violations >10%, out-of-scope charges
-- **Medium:** Price mismatches 5-10%, retention mismatches 1-10%
-- **Low:** Minor deviations within tolerance
-
-## Project Structure
-
-```
-voronode/
-├── backend/
-│   ├── core/           # Config, models, state definitions
-│   ├── db/             # Neo4j client & schema
-│   ├── vector/         # ChromaDB client
-│   ├── agents/         # Extractor, validator, compliance auditor
-│   ├── services/       # LLM client, graph builder
-│   ├── workflows/      # LangGraph nodes, routing, workflow definition
-│   ├── api/            # FastAPI routes & schemas
-│   └── tests/
-│       ├── unit/       # Model, schema, compliance tests
-│       ├── integration/# Pipeline tests
-│       └── workflows/  # LangGraph workflow tests
-├── frontend/           # Streamlit dashboard (Phase 4A)
-│   ├── pages/          # Risk Feed, Quarantine Queue, Upload, Graph Explorer, Analytics
-│   ├── components/     # Reusable UI components
-│   ├── utils/          # API client, formatters
-│   └── app.py          # Main entry point
-├── scripts/            # Setup & data generation
-├── docker/             # Database containers
-├── examples/           # Demo scripts
-└── README.md
-
-### Test Fixtures
-
-```
-backend/tests/fixtures/
-├── invoices/           # 10 invoice PDFs + JSON metadata
-│   ├── INV-2024-0001.pdf / .json
-│   └── ...
-├── contracts/          # 5 contract JSON files
-│   ├── CONTRACT-001.json  (Schultz LLC → South Alyssa Tower, clean pass)
-│   ├── CONTRACT-002.json  (Baxter LLC → West George Tower, clean pass)
-│   ├── CONTRACT-003.json  (Edwards-James → South Alyssa Tower, scope violation)
-│   ├── CONTRACT-004.json  (Paul, Kelley and Simmons → Sheltonhaven Tower, price violation)
-│   └── CONTRACT-005.json  (Gates Inc → Sheltonhaven Tower, near billing cap)
-├── budgets/            # Per-project budget lines
-│   ├── PRJ-001-budgets.json  (South Alyssa Tower, 4 cost codes)
-│   ├── PRJ-002-budgets.json  (West George Tower, 3 cost codes)
-│   └── PRJ-003-budgets.json  (Sheltonhaven Tower, 4 cost codes)
-├── projects.json       # 3 active construction projects
-└── contractors.json    # 10 contractors with license numbers
-```
-
-Contracts are designed to create realistic compliance scenarios: clean passes, unit price violations, scope violations (unapproved cost codes), and near-cap billing.
-```
-
-## API Endpoints
-
-### Invoice Processing
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/invoices/upload-graph` | POST | Upload invoice with LangGraph workflow |
-| `/api/invoices/upload` | POST | Legacy sequential pipeline |
-| `/api/invoices/{id}` | GET | Get invoice details from Neo4j |
-
-### Workflow Management
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/workflows/quarantined` | GET | List workflows awaiting review |
-| `/api/workflows/{id}/resume` | POST | Resume with human feedback |
-| `/api/workflows/{id}/status` | GET | Poll workflow status |
-
-### Health
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Check Neo4j & ChromaDB connectivity |
+---
 
 ## Configuration
 
-### Environment Variables
+Copy `.env.example` to `.env` and fill in the values below.
 
 ```bash
-# LLM
+# LLM providers
 GROQ_API_KEY=gsk_xxx
 GROQ_MODEL=llama-3.3-70b-versatile
-GROQ_MAX_RETRIES=3
-
-# Embeddings
 OPENAI_API_KEY=sk-xxx
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4o-mini
+GEMINI_API_KEY=xxx
+GEMINI_MODEL=gemini-2.5-pro
+ANTHROPIC_API_KEY=sk-ant-xxx
+TAVILY_API_KEY=tvly-xxx       # optional, enables web search
 
-# Neo4j
+# Databases
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=voronode123
-
-# ChromaDB
 CHROMADB_HOST=localhost
 CHROMADB_PORT=8000
 
-# Workflow (Phase 3)
+# Workflow
 WORKFLOW_MAX_RETRIES=3
 WORKFLOW_CHECKPOINT_DB=workflow_checkpoints.db
 WORKFLOW_STATE_DB=workflow_states.db
 WORKFLOW_QUARANTINE_HIGH_RISK=true
 
-# Compliance Auditor (Phase 4B)
+# Compliance thresholds
 ENABLE_COMPLIANCE_AUDIT=true
-COMPLIANCE_PRICE_TOLERANCE_PERCENT=0.05  # 5% tolerance
-COMPLIANCE_RETENTION_TOLERANCE_PERCENT=0.01  # 1% tolerance
-COMPLIANCE_QUARANTINE_ON_VIOLATION=true
-COMPLIANCE_CRITICAL_THRESHOLD=1  # Quarantine if 1+ critical violations
-COMPLIANCE_HIGH_THRESHOLD=2  # Quarantine if 2+ high violations
+COMPLIANCE_PRICE_TOLERANCE_PERCENT=0.05
+COMPLIANCE_RETENTION_TOLERANCE_PERCENT=0.01
 
-# API
-API_UPLOAD_MAX_SIZE=10485760  # 10MB
+# JWT auth
+JWT_SECRET_KEY=change-me-in-production
+JWT_ALGORITHM=HS256
+JWT_EXPIRY_MINUTES=1440
+
+# General
+LOG_LEVEL=INFO
 ```
+
+---
+
+## Project structure
+
+```
+voronode/
+├── backend/
+│   ├── agents/
+│   │   ├── orchestrator.py        # LangGraph StateGraph definition
+│   │   ├── planner_agent.py       # Query routing & planning (Gemini)
+│   │   ├── executor_agent.py      # Tool execution + circuit breaker
+│   │   ├── validator_agent.py     # Result validation & retry feedback
+│   │   ├── responder_agent.py     # Response formatting (text/table/chart)
+│   │   ├── upload_agent.py        # Document processing pipeline
+│   │   ├── tools/                 # 13 executor tools
+│   │   └── prompts/               # Jinja2 prompt templates (.j2)
+│   ├── api/
+│   │   ├── main.py                # FastAPI app (CORS, startup)
+│   │   ├── routes.py              # Router aggregator
+│   │   └── routers/               # auth, chat, conversations, workflows,
+│   │                              #   graph, analytics, budgets, health
+│   ├── auth/
+│   │   ├── user_store.py          # SQLite user CRUD
+│   │   ├── utils.py               # JWT encode/decode, bcrypt hashing
+│   │   └── dependencies.py        # FastAPI get_current_user() Depends
+│   ├── core/
+│   │   ├── config.py              # Pydantic settings from .env
+│   │   ├── models.py              # Domain models (Invoice, Contract, …)
+│   │   ├── state.py               # ConversationState TypedDict
+│   │   └── circuit_breaker.py     # CircuitBreaker per tool
+│   ├── ingestion/
+│   │   ├── extractor.py           # PDF → structured Invoice (Groq)
+│   │   ├── validator.py           # Anomaly detection (math + semantic)
+│   │   ├── compliance_auditor.py  # Contract compliance checks
+│   │   ├── contract_extractor.py  # Contract PDF → structured data
+│   │   ├── budget_extractor.py    # Budget PDF/Excel → structured data
+│   │   └── pipeline/              # LangGraph ingestion workflow nodes
+│   ├── memory/
+│   │   ├── conversation_store.py  # SQLite CRUD (conversations + messages)
+│   │   └── mem0_client.py         # Mem0 semantic memory (ChromaDB-backed)
+│   ├── services/
+│   │   ├── llm_client.py          # Multi-LLM wrapper with retry backoff
+│   │   ├── graph_builder.py       # Neo4j MERGE-based idempotent inserts
+│   │   └── workflow_manager.py    # LangGraph checkpoint management
+│   ├── graph/
+│   │   ├── client.py              # Neo4j driver wrapper
+│   │   └── schema.py              # Node/relationship definitions
+│   ├── vector/
+│   │   └── client.py              # ChromaDB HTTP client wrapper
+│   └── tests/
+│       ├── unit/                  # Models, compliance, agents
+│       ├── integration/           # Pipeline, orchestrator, Cypher
+│       ├── workflows/             # LangGraph workflow nodes & routing
+│       ├── fixtures/              # PDFs, contracts, budgets, JSON
+│       └── conftest.py            # Shared fixtures & mocks
+├── frontend/
+│   ├── app.py                     # Streamlit entry point + auth gate
+│   ├── pages/
+│   │   ├── Login.py               # Login / register tabs
+│   │   ├── Chat.py                # Conversational AI + file upload
+│   │   ├── Analytics.py           # Metrics & charts dashboard
+│   │   ├── Graph_Explorer.py      # Interactive Cypher query builder
+│   │   ├── Quarantine_Queue.py    # Invoice review (approve/reject/correct)
+│   │   └── Risk_Feed.py           # Real-time processing monitor
+│   ├── components/                # Anomaly badges, invoice cards, status UI
+│   └── utils/
+│       ├── api_client.py          # HTTP client (auth headers, error handling)
+│       └── formatters.py          # Currency, datetime, status helpers
+├── docker/
+│   └── docker-compose.yml         # Neo4j + ChromaDB containers
+├── scripts/                       # Setup & test data generation
+├── data/                          # conversations.db (git-ignored)
+└── pyproject.toml
+```
+
+---
+
+## Multi-agent chat system
+
+User messages travel through a LangGraph StateGraph:
+
+```
+User message
+    ↓
+[Inject conversation history + Mem0 semantic memories]
+    ↓
+PlannerAgent  (Gemini 2.5 Pro)
+    ├── route: generic_response  →  ResponderAgent  →  END
+    ├── route: clarification     →  ResponderAgent  →  END
+    └── route: execution_plan
+          ↓
+          execution_mode: one_way  OR  react (max 5 steps)
+          ↓
+    ExecutorAgent  (runs tools with 30s timeout + circuit breaker)
+          ↓
+    ValidatorAgent
+          ├── valid  →  ResponderAgent  →  END
+          └── invalid (retry < 2)  →  PlannerAgent  (with feedback)
+          ↓
+    ResponderAgent  (GPT-4o-mini)
+          └── format: text | table | chart
+          ↓
+[Save turn to ConversationStore + extract facts to Mem0]
+    ↓
+Stream response to frontend
+```
+
+### Executor tools
+
+| Tool | Purpose |
+|---|---|
+| `CypherQueryTool` | Generate + execute Neo4j Cypher (Claude Haiku 4.5) |
+| `VectorSearchTool` | ChromaDB semantic search on indexed documents |
+| `CalculatorTool` | Safe arithmetic evaluation |
+| `DatetimeTool` | Date parsing, difference, formatting |
+| `WebSearchTool` | Tavily web search (optional) |
+| `PythonReplTool` | Restricted Python execution |
+| `GraphExplorerTool` | Neo4j relationship traversal |
+| `ComplianceCheckTool` | Validate invoice against contract terms |
+| `InvoiceUploadTool` | Handle invoice PDF uploads |
+| `ContractUploadTool` | Handle contract document uploads |
+| `BudgetUploadTool` | Handle budget document uploads |
+| `WorkflowTool` | Manage LangGraph workflow execution |
+| `GraphExplorerTool` | Explore graph topology |
+
+All tools: `.run(action, context, user_id)` · 30s timeout · circuit breaker (3 failures → 60s cooldown)
+
+---
+
+## Document ingestion pipeline
+
+```
+Upload PDF
+    ↓
+InvoiceExtractor  (pdfplumber → pypdf fallback → Groq Llama 3.3 70B)
+    ↓
+InvoiceValidator  (required fields · math checks · semantic LLM pass)
+    ├── medium risk (< 3 retries)  →  Critic feedback → re-extract
+    └── high / critical            →  Quarantine ⏸
+    ↓
+ComplianceAuditor  (runs against loaded Contract node)
+    ├── retention rate  (±1% tolerance)
+    ├── unit prices     (±5% tolerance)
+    ├── billing cap     (total ≤ contract value)
+    └── scope           (all cost codes approved)
+    ├── critical / 2+ high  →  Quarantine ⏸
+    └── clean
+          ↓
+GraphBuilder.insert_invoice()  (Neo4j MERGE, user_id tagged)
+ChromaDBClient.add_documents() (vector embed)
+Status: completed ✅
+```
+
+### Risk levels
+
+| Level | Conditions | Action |
+|---|---|---|
+| Low | 0 high, < 3 medium anomalies | Auto-approve → graph |
+| Medium | 1–2 medium anomalies | Retry with critic (max 3) |
+| High | 1 high OR 3+ medium | Quarantine for review |
+| Critical | 2+ high anomalies | Quarantine for review |
+
+---
+
+## API reference
+
+### Authentication
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Register (username + password) |
+| POST | `/api/auth/login` | Login → JWT token |
+| GET | `/api/auth/me` | Current user info |
+
+### Chat
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/chat` | Send message (+ optional file attachments) |
+| POST | `/api/chat/stream` | Streaming SSE variant |
+
+### Conversations
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/conversations` | Create conversation |
+| GET | `/api/conversations` | List user's conversations |
+| GET | `/api/conversations/{id}` | Get conversation + messages |
+| PATCH | `/api/conversations/{id}/title` | Rename |
+| DELETE | `/api/conversations/{id}` | Delete (cascade) |
+
+### Workflows
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/workflows/quarantined` | List quarantined documents |
+| POST | `/api/workflows/{id}/resume` | Approve / reject / correct-and-retry |
+| GET | `/api/workflows/{id}/status` | Poll status |
+
+### Graph
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/graph/query` | Execute Cypher (user_id isolated) |
+| GET | `/api/graph/stats` | Node/relationship counts |
+
+### Other
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/analytics/metrics` | Dashboard KPIs |
+| GET | `/api/analytics/anomalies` | Anomaly distribution |
+| GET | `/api/budgets` | List budgets |
+| POST | `/api/budgets/upload` | Upload budget document |
+| GET | `/api/health` | Neo4j + ChromaDB health check |
+
+---
 
 ## Testing
 
-### Run All Tests
-
 ```bash
+# All tests
 uv run pytest -v
-```
 
-### Run Specific Test Suites
-
-```bash
-# Unit tests
-uv run pytest backend/tests/unit/ -v
-
-# Integration tests
+# By suite
+uv run pytest backend/tests/unit/       -v
 uv run pytest backend/tests/integration/ -v
-
-# Workflow tests
-uv run pytest backend/tests/workflows/ -v
+uv run pytest backend/tests/workflows/  -v
 ```
 
-### Test Coverage
+**Coverage**: 50+ tests across unit, integration, and workflow suites.
 
-```bash
-# Phase 1: Unit tests (6/6 passing)
-uv run pytest backend/tests/unit/test_models.py -v
+---
 
-# Phase 2: Integration tests (11/12 passing)
-uv run pytest backend/tests/integration/ -v
+## Database schemas
 
-# Phase 3: Workflow tests (26/26 passing)
-uv run pytest backend/tests/workflows/ -v
+### Neo4j nodes
 
-# Phase 4B: Compliance tests (15+ tests passing)
-uv run pytest backend/tests/unit/test_compliance_auditor.py -v
-```
+All nodes include a `user_id` property for tenant isolation.
 
-## Development
+| Label | Key properties |
+|---|---|
+| `Invoice` | invoice_number, date, amount, status |
+| `LineItem` | description, quantity, unit_price, cost_code |
+| `Contract` | contractor_id, project_id, retention_rate |
+| `Project` | name, budget, status |
+| `Contractor` | name, license_number |
+| `BudgetLine` | cost_code, allocated, spent |
 
-### Adding New Workflow Nodes
+**Relationships**: `ISSUED_BY`, `FOR_PROJECT`, `CONTAINS_ITEM`, `MAPS_TO`, `BINDS`, `HAS_BUDGET`
 
-1. Define node function in `backend/workflows/nodes.py`:
-```python
-def my_custom_node(state: WorkflowState) -> Dict[str, Any]:
-    # Process state
-    return {"field": "value"}
-```
-
-2. Add to graph in `backend/workflows/invoice_workflow.py`:
-```python
-workflow.add_node("my_custom", my_custom_node)
-workflow.add_edge("previous_node", "my_custom")
-```
-
-3. Add tests in `backend/tests/workflows/test_nodes.py`
-
-### Modifying Routing Logic
-
-Edit `backend/workflows/routing.py` to change conditional routing decisions.
-
-### Customizing Validation
-
-Add new validation checks in `backend/agents/validator.py`:
-```python
-def _validate_custom(self, invoice: Invoice) -> List[ValidationAnomaly]:
-    # Custom validation logic
-    pass
-```
-
-## Database Queries
-
-### Neo4j (Cypher)
-
-```cypher
-// Find all invoices for a contractor
-MATCH (c:Contractor)-[:ISSUED]->(i:Invoice)
-WHERE c.name = "ABC Construction"
-RETURN i
-
-// Find budget overruns
-MATCH (p:Project)-[:HAS_BUDGET]->(bl:BudgetLine)
-WHERE bl.spent > bl.allocated
-RETURN p.name, bl.cost_code, bl.spent - bl.allocated AS overrun
-
-// Invoice line items with cost codes
-MATCH (i:Invoice)-[:CONTAINS_ITEM]->(li:LineItem)-[:MAPS_TO]->(bl:BudgetLine)
-RETURN i.invoice_number, li.description, bl.cost_code
-```
-
-### ChromaDB (Vector Search)
-
-```python
-from backend.vector.client import ChromaDBClient
-
-client = ChromaDBClient()
-results = client.search_documents(
-    collection_name="invoices",
-    query_text="plumbing work in January 2024",
-    n_results=5
-)
-```
-
-### Workflow State (SQLite)
+### SQLite (`data/conversations.db`)
 
 ```sql
--- List all quarantined workflows
-SELECT * FROM workflow_states WHERE paused = 1;
-
--- Count workflows by status
-SELECT status, COUNT(*) FROM workflow_states GROUP BY status;
-
--- Find high-risk workflows
-SELECT * FROM workflow_states WHERE risk_level = 'high';
+users         (id, username, hashed_pw, created_at)
+conversations (id, user_id, title, created_at, updated_at)
+messages      (id, conversation_id, role, content, created_at)
 ```
 
-## Performance
+### ChromaDB collections
 
-### Typical Processing Times
+`invoices` · `contracts` · `memories` — all filtered by `user_id` metadata.
 
-| Scenario | Time | Notes |
-|----------|------|-------|
-| Clean invoice (low risk) | 5-10s | No retries needed |
-| Medium risk (1 retry) | 15-20s | Includes critic feedback |
-| High risk (quarantined) | ∞ | Awaits human review |
-
-### Retry Budget
-
-- LLM retries: 3x per attempt (Groq client)
-- Workflow retries: 3x per workflow
-- Total possible LLM calls: 9-12 max
+---
 
 ## Troubleshooting
 
-### Workflow Stuck in "processing"
-
+**Workflow stuck in "processing"**
 ```bash
-# Check checkpoint database
 sqlite3 workflow_checkpoints.db "SELECT * FROM checkpoints;"
-
-# Clear corrupted checkpoints
-rm workflow_checkpoints.db
+# If corrupted: rm workflow_checkpoints.db
 ```
 
-### Quarantined Workflows Not Showing
-
+**Database connection failures**
 ```bash
-# Query state database directly
-sqlite3 workflow_states.db "SELECT * FROM workflow_states WHERE paused = 1;"
-```
-
-### Import Errors
-
-```bash
-# Ensure all dependencies installed
-uv sync
-
-# Verify langgraph checkpoint package
-uv run python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('OK')"
-```
-
-### Database Connection Issues
-
-```bash
-# Restart Docker containers
 cd docker && docker-compose restart
-
-# Check Neo4j logs
 docker logs voronode-neo4j
-
-# Check ChromaDB logs
 docker logs voronode-chromadb
 ```
 
-## Examples
+**Import errors after install**
+```bash
+uv sync
+uv run python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('OK')"
+```
 
-See `examples/workflow_demo.py` for complete usage examples including:
-- Uploading invoices with workflow
-- Monitoring quarantine queue
-- Resuming workflows with human feedback
-- Polling workflow status
+---
 
 ## Roadmap
 
 ### Completed
-- ✅ Phase 1: Knowledge Foundation
-- ✅ Phase 2: Document Intelligence Agent
-- ✅ Phase 3: LangGraph Orchestration
-- ✅ Phase 4A: Streamlit Dashboard
-- ✅ Phase 4B: Contract Compliance Auditor
+- Phase 1: Knowledge Foundation (Neo4j + ChromaDB)
+- Phase 2: Document Intelligence (PDF extraction + validation)
+- Phase 3: LangGraph Orchestration (workflow + quarantine)
+- Phase 4A: Streamlit Dashboard (5 pages)
+- Phase 4B: Contract Compliance Auditor
+- Multi-agent conversational AI (Planner → Executor → Validator → Responder)
+- JWT authentication & per-user data isolation
+- Persistent memory (Mem0 + SQLite conversation store)
 
-### Future Enhancements (Phase 5+)
-- [ ] **Additional Agents:**
-  - [ ] AI Benchmarking Agent (compare costs to historical data)
-  - [ ] Cost-to-Complete Forecaster (burn rate + projections)
-  - [ ] Automated contract term extraction from PDFs
-- [ ] **Production Hardening:**
-  - [ ] React/Next.js migration for external users
-  - [ ] Multi-tenancy and RBAC
-  - [ ] Async job processing with Celery/RQ
-  - [ ] Audit logging
-  - [ ] Prometheus metrics & Grafana dashboards
-- [ ] **Intelligence:**
-  - [ ] RAG-powered critic with historical knowledge
-  - [ ] Predictive risk modeling
-  - [ ] Workflow visualization (real-time Mermaid diagrams)
-  - [ ] Multi-document batch processing
-  - [ ] Cost tracking (LLM token usage)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass: `uv run pytest`
-5. Submit a pull request
-
-## License
-
-See LICENSE file.
-
-## Support
-
-- **Streamlit Dashboard:** http://localhost:8501 (Phase 4)
-- **API Documentation:** http://localhost:8080/docs (when server is running)
-- **Neo4j Browser:** http://localhost:7474
-- **ChromaDB API:** http://localhost:8000/docs
-- **Issues:** GitHub Issues
+### Planned
+- [ ] React / Next.js frontend migration
+- [ ] Celery async job processing
+- [ ] Prometheus metrics & Grafana dashboards
+- [ ] RAG-powered critic with historical knowledge
+- [ ] Predictive risk modeling
+- [ ] Batch multi-document processing
+- [ ] AI Benchmarking Agent (cost-vs-historical comparison)
+- [ ] Cost-to-Complete Forecaster (burn rate projections)
 
 ---
 
-**Built with:** LangGraph • Streamlit • FastAPI • Neo4j • ChromaDB • Groq • OpenAI
+**Stack:** FastAPI · LangGraph · Streamlit · Neo4j · ChromaDB · Gemini · OpenAI · Anthropic · Groq · Mem0 · python-jose
