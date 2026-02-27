@@ -42,6 +42,7 @@ class ComplianceCheckTool:
         context: Optional[Dict[str, Any]] = None,
         invoice_id: Optional[str] = None,
         contract_id: Optional[str] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Check compliance.
@@ -78,11 +79,12 @@ class ComplianceCheckTool:
             }
 
         try:
-            # Fetch invoice with contract and contractor IDs
-            query = """
+            # Fetch invoice — enforce user_id so a user can't check another user's invoice
+            cypher = """
             MATCH (i:Invoice {id: $invoice_id})
+            WHERE i.user_id = $user_id
             OPTIONAL MATCH (c:Contractor)-[:ISSUED]->(i)
-            OPTIONAL MATCH (i)-[:UNDER_CONTRACT]->(con:Contract)
+            OPTIONAL MATCH (i)-[:BILLED_AGAINST]->(con:Contract)
             OPTIONAL MATCH (i)-[:CONTAINS_ITEM]->(li:LineItem)
             RETURN i,
                    c.contractor_id as contractor_id,
@@ -97,7 +99,7 @@ class ComplianceCheckTool:
                    }) as line_items
             """
 
-            result = self.neo4j_client.run_query(query, {"invoice_id": invoice_id})
+            result = self.neo4j_client.run_query(cypher, {"invoice_id": invoice_id, "user_id": user_id})
 
             if not result or not result[0]:
                 return {

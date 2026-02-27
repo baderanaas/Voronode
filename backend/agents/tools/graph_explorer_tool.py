@@ -35,6 +35,7 @@ class GraphExplorerTool:
         context: Optional[Dict[str, Any]] = None,
         entity_id: Optional[str] = None,
         entity_type: Optional[str] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Explore graph relationships.
@@ -61,23 +62,23 @@ class GraphExplorerTool:
 
         try:
             if "contractor" in action_lower and "invoice" in action_lower:
-                return self._find_contractor_invoices(action, context)
+                return self._find_contractor_invoices(action, context, user_id)
 
             elif "project" in action_lower and "invoice" in action_lower:
-                return self._find_project_invoices(action, context)
+                return self._find_project_invoices(action, context, user_id)
 
             elif "project" in action_lower and "contract" in action_lower:
-                return self._find_project_contracts(action, context)
+                return self._find_project_contracts(action, context, user_id)
 
             elif "contractor" in action_lower and "contract" in action_lower:
-                return self._find_contractor_contracts(action, context)
+                return self._find_contractor_contracts(action, context, user_id)
 
             elif "project" in action_lower and "budget" in action_lower:
-                return self._find_project_budget(action, context)
+                return self._find_project_budget(action, context, user_id)
 
             else:
                 # Generic relationship exploration
-                return self._explore_generic(action, entity_id, entity_type)
+                return self._explore_generic(action, entity_id, entity_type, user_id)
 
         except Exception as e:
             logger.error("graph_explorer_failed", error=str(e), action=action)
@@ -87,7 +88,7 @@ class GraphExplorerTool:
                 "status": "failed",
             }
 
-    def _find_contractor_invoices(self, action: str, context: Optional[Dict]) -> Dict[str, Any]:
+    def _find_contractor_invoices(self, action: str, context: Optional[Dict], user_id: str) -> Dict[str, Any]:
         """Find all invoices for a contractor."""
         # Extract contractor ID or name from action or context
         contractor_id = self._extract_entity_id(action, context, "contractor")
@@ -98,15 +99,15 @@ class GraphExplorerTool:
                 "status": "failed",
             }
 
-        # Query Neo4j
-        cypher = f"""
+        cypher = """
         MATCH (c:Contractor)-[:SUBMITTED]->(i:Invoice)
-        WHERE c.id = '{contractor_id}' OR c.name CONTAINS '{contractor_id}'
+        WHERE (c.id = $contractor_id OR c.name CONTAINS $contractor_id)
+          AND i.user_id = $user_id
         RETURN i, c
         LIMIT 100
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"contractor_id": contractor_id, "user_id": user_id})
 
         return {
             "exploration": "contractor invoices",
@@ -116,7 +117,7 @@ class GraphExplorerTool:
             "status": "success",
         }
 
-    def _find_project_invoices(self, action: str, context: Optional[Dict]) -> Dict[str, Any]:
+    def _find_project_invoices(self, action: str, context: Optional[Dict], user_id: str) -> Dict[str, Any]:
         """Find all invoices for a project."""
         project_id = self._extract_entity_id(action, context, "project")
 
@@ -126,14 +127,15 @@ class GraphExplorerTool:
                 "status": "failed",
             }
 
-        cypher = f"""
-        MATCH (p:Project)<-[:FOR_PROJECT]-(i:Invoice)
-        WHERE p.id = '{project_id}' OR p.name CONTAINS '{project_id}'
+        cypher = """
+        MATCH (i:Invoice)-[:BILLED_AGAINST]->(ct:Contract)-[:FOR_PROJECT]->(p:Project)
+        WHERE (p.id = $project_id OR p.name CONTAINS $project_id)
+          AND i.user_id = $user_id
         RETURN i, p
         LIMIT 100
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"project_id": project_id, "user_id": user_id})
 
         return {
             "exploration": "project invoices",
@@ -143,21 +145,22 @@ class GraphExplorerTool:
             "status": "success",
         }
 
-    def _find_project_contracts(self, action: str, context: Optional[Dict]) -> Dict[str, Any]:
+    def _find_project_contracts(self, action: str, context: Optional[Dict], user_id: str) -> Dict[str, Any]:
         """Find all contracts for a project."""
         project_id = self._extract_entity_id(action, context, "project")
 
         if not project_id:
             return {"error": "Could not identify project", "status": "failed"}
 
-        cypher = f"""
-        MATCH (p:Project)<-[:FOR_PROJECT]-(c:Contract)
-        WHERE p.id = '{project_id}' OR p.name CONTAINS '{project_id}'
+        cypher = """
+        MATCH (c:Contract)-[:FOR_PROJECT]->(p:Project)
+        WHERE (p.id = $project_id OR p.name CONTAINS $project_id)
+          AND c.user_id = $user_id
         RETURN c, p
         LIMIT 100
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"project_id": project_id, "user_id": user_id})
 
         return {
             "exploration": "project contracts",
@@ -167,21 +170,22 @@ class GraphExplorerTool:
             "status": "success",
         }
 
-    def _find_contractor_contracts(self, action: str, context: Optional[Dict]) -> Dict[str, Any]:
+    def _find_contractor_contracts(self, action: str, context: Optional[Dict], user_id: str) -> Dict[str, Any]:
         """Find all contracts for a contractor."""
         contractor_id = self._extract_entity_id(action, context, "contractor")
 
         if not contractor_id:
             return {"error": "Could not identify contractor", "status": "failed"}
 
-        cypher = f"""
-        MATCH (c:Contractor)<-[:WITH_CONTRACTOR]-(contract:Contract)
-        WHERE c.id = '{contractor_id}' OR c.name CONTAINS '{contractor_id}'
+        cypher = """
+        MATCH (c:Contractor)-[:HAS_CONTRACT]->(contract:Contract)
+        WHERE (c.id = $contractor_id OR c.name CONTAINS $contractor_id)
+          AND contract.user_id = $user_id
         RETURN contract, c
         LIMIT 100
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"contractor_id": contractor_id, "user_id": user_id})
 
         return {
             "exploration": "contractor contracts",
@@ -191,21 +195,22 @@ class GraphExplorerTool:
             "status": "success",
         }
 
-    def _find_project_budget(self, action: str, context: Optional[Dict]) -> Dict[str, Any]:
+    def _find_project_budget(self, action: str, context: Optional[Dict], user_id: str) -> Dict[str, Any]:
         """Find budget for a project."""
         project_id = self._extract_entity_id(action, context, "project")
 
         if not project_id:
             return {"error": "Could not identify project", "status": "failed"}
 
-        cypher = f"""
+        cypher = """
         MATCH (p:Project)-[:HAS_BUDGET]->(b:Budget)-[:HAS_LINE]->(bl:BudgetLine)
-        WHERE p.id = '{project_id}' OR p.name CONTAINS '{project_id}'
+        WHERE (p.id = $project_id OR p.name CONTAINS $project_id)
+          AND b.user_id = $user_id
         RETURN b, bl, p
         LIMIT 100
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"project_id": project_id, "user_id": user_id})
 
         return {
             "exploration": "project budget",
@@ -220,6 +225,7 @@ class GraphExplorerTool:
         action: str,
         entity_id: Optional[str],
         entity_type: Optional[str],
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """Generic relationship exploration."""
         if not entity_id or not entity_type:
@@ -230,13 +236,13 @@ class GraphExplorerTool:
 
         cypher = f"""
         MATCH (n:{entity_type})
-        WHERE n.id = '{entity_id}'
+        WHERE n.id = $entity_id AND ($user_id IS NULL OR n.user_id IS NULL OR n.user_id = $user_id)
         OPTIONAL MATCH (n)-[r]-(related)
         RETURN n, type(r) as relationship_type, related
         LIMIT 50
         """
 
-        results = self.neo4j_client.run_query(cypher)
+        results = self.neo4j_client.run_query(cypher, {"entity_id": entity_id, "user_id": user_id})
 
         return {
             "exploration": "generic relationships",

@@ -1,8 +1,9 @@
 """Budget endpoints."""
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from backend.auth.dependencies import get_current_user
 from backend.api.schemas import (
     BudgetDetailResponse,
     BudgetLineResponse,
@@ -17,7 +18,7 @@ _graph_builder = GraphBuilder()
 
 
 @router.get("/{budget_id}", response_model=BudgetDetailResponse)
-async def get_budget(budget_id: str):
+async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
     """Get budget details by ID."""
     logger.info("budget_detail_requested", budget_id=budget_id)
     try:
@@ -59,7 +60,7 @@ async def get_budget(budget_id: str):
 
 
 @router.get("/project/{project_id}")
-async def get_project_budgets(project_id: str):
+async def get_project_budgets(project_id: str, _: dict = Depends(get_current_user)):
     """Get all budgets for a project."""
     logger.info("project_budgets_requested", project_id=project_id)
     try:
@@ -75,7 +76,7 @@ async def get_project_budgets(project_id: str):
 
 
 @router.get("/{budget_id}/variance", response_model=BudgetVarianceResponse)
-async def get_budget_variance(budget_id: str):
+async def get_budget_variance(budget_id: str, _: dict = Depends(get_current_user)):
     """Calculate budget variance (budget vs actual spend)."""
     logger.info("budget_variance_requested", budget_id=budget_id)
     try:

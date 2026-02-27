@@ -7,13 +7,13 @@ Original User Query: "{{ original_query }}"
 Neo4j Graph Schema:
 
 Nodes:
-- Invoice (id, invoice_number, date, due_date, amount, status)
+- Invoice (id, invoice_number, date, due_date, amount, status, user_id)
 - LineItem (id, description, cost_code, quantity, unit_price, total)
-- Contract (id, contract_id, contractor_id, project_id, value, retention_rate, start_date, end_date, approved_cost_codes, unit_price_schedule)
+- Contract (id, contract_id, contractor_id, project_id, value, retention_rate, start_date, end_date, approved_cost_codes, unit_price_schedule, user_id)
 - Contractor (id, contractor_id, name, license_number, rating)
 - Project (id, project_id, name, budget, start_date, end_date, status)
-- Budget (id, budget_id, project_id, total_allocated, total_spent, total_remaining)
-- BudgetLine (id, cost_code, description, allocated, spent, remaining)
+- Budget (id, budget_id, project_id, total_allocated, total_spent, total_remaining, user_id)
+- BudgetLine (id, cost_code, description, allocated, spent, remaining, user_id)
 
 Relationships (EXACT names — do NOT invent others):
 - (Contractor)-[:ISSUED]->(Invoice)

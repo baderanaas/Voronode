@@ -1,8 +1,9 @@
 """Graph database query endpoints."""
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from backend.auth.dependencies import get_current_user
 from backend.graph.client import Neo4jClient
 
 router = APIRouter(prefix="/graph", tags=["graph"])
@@ -10,7 +11,7 @@ logger = structlog.get_logger()
 
 
 @router.get("/stats")
-async def get_graph_stats():
+async def get_graph_stats(_: dict = Depends(get_current_user)):
     """Get Neo4j graph database statistics."""
     logger.info("graph_stats_requested")
     try:
@@ -35,7 +36,7 @@ async def get_graph_stats():
 
 
 @router.post("/query")
-async def query_graph(query: dict):
+async def query_graph(query: dict, _: dict = Depends(get_current_user)):
     """Execute a custom Cypher query on Neo4j."""
     cypher_query = query.get("query")
     if not cypher_query:

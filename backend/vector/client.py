@@ -1,6 +1,7 @@
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 from chromadb.utils import embedding_functions
+from typing import Optional
 from backend.core.config import settings
 import structlog
 
@@ -81,6 +82,7 @@ class ChromaDBClient:
         collection_name: str,
         query_text: str,
         n_results: int = 5,
+        where: Optional[dict] = None,
     ) -> dict:
         """Semantic similarity search across a collection."""
         collection_map = {
@@ -94,7 +96,10 @@ class ChromaDBClient:
                 name=collection_name,
                 embedding_function=self.embedding_function,
             )
-        return collection.query(query_texts=[query_text], n_results=n_results)
+        kwargs: dict = {"query_texts": [query_text], "n_results": n_results}
+        if where:
+            kwargs["where"] = where
+        return collection.query(**kwargs)
 
     def add_document(
         self, collection_name: str, doc_id: str, text: str, metadata: dict

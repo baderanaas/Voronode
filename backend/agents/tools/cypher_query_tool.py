@@ -5,6 +5,7 @@ Core domain tool for querying invoices, contracts, budgets, projects, and contra
 Generates and executes Cypher queries based on natural language actions.
 """
 
+import re
 import structlog
 from typing import Dict, Any, Optional, List
 from datetime import date, datetime
@@ -49,6 +50,7 @@ class CypherQueryTool:
         query: str = "",
         action: str = "",
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Generate and execute Cypher query.
@@ -69,7 +71,7 @@ class CypherQueryTool:
         logger.info("cypher_tool_executing", action=action[:100])
 
         # Generate Cypher query from action
-        cypher_query = self._generate_cypher(action, query, context)
+        cypher_query = self._generate_cypher(action, query, context, user_id)
 
         if not cypher_query:
             return {
@@ -80,9 +82,13 @@ class CypherQueryTool:
 
         logger.info("cypher_generated", query=cypher_query[:200])
 
+        # Inject user_id filter in code — never trust the LLM to do it
+        cypher_query, params = self._inject_user_filter(cypher_query, user_id)
+        logger.info("cypher_user_filter_applied", user_id=user_id)
+
         # Execute query
         try:
-            results = self.neo4j_client.run_query(cypher_query)
+            results = self.neo4j_client.run_query(cypher_query, parameters=params)
 
             # Serialize Neo4j types to JSON-compatible types
             serialized_results = self._serialize_neo4j_types(results)
@@ -133,6 +139,7 @@ class CypherQueryTool:
         action: str,
         original_query: str,
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> str:
         """
         Generate Cypher query from natural language action.
@@ -194,3 +201,45 @@ class CypherQueryTool:
         except Exception as e:
             logger.error("cypher_generation_failed", error=str(e))
             return ""
+
+    # Labels whose nodes carry a user_id property
+    _USER_SCOPED_LABELS = {"Invoice", "Contract", "Budget", "BudgetLine"}
+
+    def _inject_user_filter(self, cypher: str, user_id: str) -> tuple[str, dict]:
+        """
+        Programmatically inject user_id filtering into an LLM-generated Cypher query.
+
+        Uses Neo4j parameterized queries so the user_id value is never concatenated
+        into the query string (prevents injection). Returns the modified query and
+        the parameters dict to pass to run_query().
+        """
+        params: dict = {}
+
+        # Find all (alias:Label) patterns for user-scoped node types
+        aliases = {
+            m.group(1)
+            for m in re.finditer(r"\((\w+):(\w+)", cypher)
+            if m.group(2) in self._USER_SCOPED_LABELS
+        }
+
+        if not aliases:
+            return cypher, params
+
+        params["_user_id"] = user_id
+        conditions = " AND ".join(f"{a}.user_id = $_user_id" for a in sorted(aliases))
+
+        # Inject after the first WHERE keyword if present; otherwise insert before
+        # the first RETURN / WITH / ORDER / LIMIT keyword.
+        where_m = re.search(r"\bWHERE\b", cypher, re.IGNORECASE)
+        if where_m:
+            pos = where_m.end()
+            cypher = cypher[:pos] + f" {conditions} AND" + cypher[pos:]
+        else:
+            for keyword in ("RETURN", "WITH", "ORDER", "LIMIT"):
+                kw_m = re.search(rf"\b{keyword}\b", cypher, re.IGNORECASE)
+                if kw_m:
+                    pos = kw_m.start()
+                    cypher = cypher[:pos] + f"WHERE {conditions} " + cypher[pos:]
+                    break
+
+        return cypher, params

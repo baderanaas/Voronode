@@ -107,6 +107,8 @@ def executor_node(state: ConversationState) -> ConversationState:
 
     logger.info("executor_node_executing", mode=execution_mode)
 
+    user_id = state.get("user_id", "default_user")
+
     if execution_mode == "one_way":
         # Execute all steps at once
         plan = state["planner_output"].get("plan", {}).get("one_way", {})
@@ -114,6 +116,7 @@ def executor_node(state: ConversationState) -> ConversationState:
         results = executor.execute_one_way(
             plan=plan,
             user_query=state["user_query"],
+            user_id=user_id,
         )
 
         state["execution_results"] = results
@@ -140,6 +143,7 @@ def executor_node(state: ConversationState) -> ConversationState:
             step=step,
             user_query=state["user_query"],
             previous_results=state.get("completed_steps", []),
+            user_id=user_id,
         )
 
         # Add to completed steps

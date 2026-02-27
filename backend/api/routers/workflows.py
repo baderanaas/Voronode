@@ -3,7 +3,7 @@
 from typing import List, Optional
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.schemas import (
     InvoiceUploadResponse,
@@ -12,6 +12,7 @@ from backend.api.schemas import (
     WorkflowResumeRequest,
     WorkflowStatusResponse,
 )
+from backend.auth.dependencies import get_current_user
 from backend.services.workflow_manager import WorkflowManager
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -21,7 +22,7 @@ _workflow_manager = WorkflowManager()
 
 
 @router.get("/quarantined", response_model=List[QuarantinedWorkflowResponse])
-async def get_quarantined_workflows():
+async def get_quarantined_workflows(_: dict = Depends(get_current_user)):
     """Get all workflows awaiting human review."""
     logger.info("quarantined_workflows_requested")
     try:
@@ -52,7 +53,7 @@ async def get_quarantined_workflows():
 
 
 @router.post("/{document_id}/resume", response_model=InvoiceUploadResponse)
-async def resume_workflow(document_id: str, request: WorkflowResumeRequest):
+async def resume_workflow(document_id: str, request: WorkflowResumeRequest, _: dict = Depends(get_current_user)):
     """Resume a quarantined workflow with human feedback."""
     logger.info(
         "workflow_resume_requested",
@@ -92,7 +93,7 @@ async def resume_workflow(document_id: str, request: WorkflowResumeRequest):
 
 
 @router.get("/{document_id}/status", response_model=WorkflowStatusResponse)
-async def get_workflow_status(document_id: str):
+async def get_workflow_status(document_id: str, _: dict = Depends(get_current_user)):
     """Get current workflow status."""
     logger.info("workflow_status_requested", document_id=document_id)
     try:
@@ -119,7 +120,7 @@ async def get_workflow_status(document_id: str):
 
 
 @router.get("")
-async def list_workflows(status: Optional[str] = None, limit: int = 100):
+async def list_workflows(status: Optional[str] = None, limit: int = 100, _: dict = Depends(get_current_user)):
     """List all workflows, optionally filtered by status."""
     logger.info("workflows_list_requested", status=status, limit=limit)
     try:
@@ -130,7 +131,7 @@ async def list_workflows(status: Optional[str] = None, limit: int = 100):
 
 
 @router.get("/{workflow_id}")
-async def get_workflow(workflow_id: str):
+async def get_workflow(workflow_id: str, _: dict = Depends(get_current_user)):
     """Get detailed workflow information by ID."""
     logger.info("workflow_get_requested", workflow_id=workflow_id)
     try:

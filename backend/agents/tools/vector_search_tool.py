@@ -34,6 +34,7 @@ class VectorSearchTool:
         action: str = "",
         collection: str = "invoices",
         n_results: int = 5,
+        user_id: str = "default_user",
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -66,11 +67,12 @@ class VectorSearchTool:
         )
 
         try:
-            # Perform vector search
+            # Perform vector search, scoped to the current user
             results = self.chroma_client.search(
                 collection_name=collection,
                 query_text=search_query,
                 n_results=n_results,
+                where={"user_id": {"$eq": user_id}},
             )
 
             # Format results

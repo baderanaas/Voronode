@@ -143,6 +143,7 @@ class ExecutorAgent:
         user_query: str,
         action: str,
         context: Optional[Dict[str, Any]] = None,
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Execute tool with circuit breaker and timeout protection.
@@ -162,7 +163,7 @@ class ExecutorAgent:
         try:
             # Execute with circuit breaker protection
             def run_tool():
-                kwargs = {"query": user_query, "action": action}
+                kwargs = {"query": user_query, "action": action, "user_id": user_id}
                 if context:
                     kwargs["context"] = context
                 return tool.run(**kwargs)
@@ -277,7 +278,7 @@ class ExecutorAgent:
                 f"Please try rephrasing your question or contact support if this persists."
             )
 
-    def execute_one_way(self, plan: Dict[str, Any], user_query: str) -> Dict[str, Any]:
+    def execute_one_way(self, plan: Dict[str, Any], user_query: str, user_id: str = "default_user") -> Dict[str, Any]:
         """
         Execute all steps sequentially (one-way mode).
 
@@ -330,6 +331,7 @@ class ExecutorAgent:
                 tool=tool,
                 user_query=user_query,
                 action=action,
+                user_id=user_id,
             )
 
             # Add step metadata
@@ -387,6 +389,7 @@ class ExecutorAgent:
         step: Dict[str, Any],
         user_query: str,
         previous_results: List[Dict[str, Any]],
+        user_id: str = "default_user",
     ) -> Dict[str, Any]:
         """
         Execute single step in ReAct mode.
@@ -430,6 +433,7 @@ class ExecutorAgent:
             user_query=user_query,
             action=action,
             context={"previous_results": previous_results},
+            user_id=user_id,
         )
 
         # Add tool and action to result
