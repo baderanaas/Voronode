@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import structlog
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from backend.agents.orchestrator import create_multi_agent_graph
 from backend.api.schemas import ChatResponse, ChatStreamEvent
+from backend.auth.dependencies import get_current_user
 from backend.core.config import settings
 from backend.memory.conversation_store import ConversationStore
 from backend.memory.mem0_client import Mem0Client
@@ -28,6 +29,7 @@ async def chat(
     files: Optional[List[UploadFile]] = File(None),
     conversation_id: str = Form(""),
     session_id: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Unified conversational AI endpoint — accepts optional file uploads alongside
@@ -47,6 +49,8 @@ async def chat(
     upload_display_data = None
     upload_display_format = "text"
 
+    user_id = current_user["id"]
+
     # ── History + Mem0 context ────────────────────────────────────────────────
     _store = ConversationStore()
     _mem0 = Mem0Client()
@@ -58,7 +62,7 @@ async def chat(
         else []
     )
     memories_text = _mem0.search(
-        message or "context", limit=settings.memory_search_limit
+        message or "context", limit=settings.memory_search_limit, user_id=user_id
     )
 
     try:
@@ -108,7 +112,7 @@ async def chat(
                 "current_step": 0,
                 "completed_steps": [],
                 "react_max_steps": 5,
-                "user_id": "default_user",
+                "user_id": user_id,
             }
             config = {"configurable": {"thread_id": session_id or "upload_default"}}
             final_upload_state = graph.invoke(upload_state, config)
@@ -134,13 +138,13 @@ async def chat(
                     synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"
                     _store.add_message(conversation_id, "user", synthetic_user)
                     _store.add_message(conversation_id, "assistant", upload_summary)
-                    conv = _store.get_conversation(conversation_id)
+                    conv = _store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
-                        _store.update_title(conversation_id, uploaded_filenames[0][:60])
+                        _store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
                     _mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
-                    ])
+                    ], user_id=user_id)
                 metadata = {
                     "processing_time_seconds": round(time.time() - start_time, 2),
                     "file_count": count,
@@ -178,7 +182,7 @@ async def chat(
             "current_step": 0,
             "completed_steps": [],
             "react_max_steps": 5,
-            "user_id": "default_user",
+            "user_id": user_id,
         }
         config = {"configurable": {"thread_id": session_id or "default"}}
         final_state = graph.invoke(initial_state, config)
@@ -220,27 +224,27 @@ async def chat(
                 synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"
                 _store.add_message(conversation_id, "user", synthetic_user)
                 _store.add_message(conversation_id, "assistant", upload_summary)
-                conv = _store.get_conversation(conversation_id)
+                conv = _store.get_conversation(conversation_id, user_id=user_id)
                 if conv and conv["title"] == "New conversation":
-                    _store.update_title(conversation_id, uploaded_filenames[0][:60])
+                    _store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
                 _mem0.add_turn([
                     {"role": "user", "content": synthetic_user},
                     {"role": "assistant", "content": upload_summary},
-                ])
+                ], user_id=user_id)
             else:
                 # Normal text message (with or without files)
                 if original_message:
                     _store.add_message(conversation_id, "user", original_message)
                 if response_text:
                     _store.add_message(conversation_id, "assistant", response_text)
-                conv = _store.get_conversation(conversation_id)
+                conv = _store.get_conversation(conversation_id, user_id=user_id)
                 if conv and conv["title"] == "New conversation" and original_message:
-                    _store.update_title(conversation_id, original_message[:60].strip())
+                    _store.update_title(conversation_id, original_message[:60].strip(), user_id=user_id)
                 if original_message and response_text:
                     _mem0.add_turn([
                         {"role": "user", "content": original_message},
                         {"role": "assistant", "content": response_text},
-                    ])
+                    ], user_id=user_id)
 
         return ChatResponse(
             response=response_text,
@@ -290,6 +294,7 @@ async def chat_stream(
     files: Optional[List[UploadFile]] = File(None),
     conversation_id: str = Form(""),
     session_id: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Streaming conversational AI endpoint using Server-Sent Events.
@@ -297,6 +302,8 @@ async def chat_stream(
     Events emitted: planner | upload_agent | upload_summary | executor |
                     planner_react | validator | responder | complete | error
     """
+
+    user_id = current_user["id"]
 
     async def generate_events():
         start_time = time.time()
@@ -322,7 +329,7 @@ async def chat_stream(
             else []
         )
         memories_text = mem0.search(
-            message or "context", limit=settings.memory_search_limit
+            message or "context", limit=settings.memory_search_limit, user_id=user_id
         )
 
         def _emit(node_name: str, state_update: dict) -> str:
@@ -393,7 +400,7 @@ async def chat_stream(
                     "current_step": 0,
                     "completed_steps": [],
                     "react_max_steps": 5,
-                    "user_id": "default_user",
+                    "user_id": user_id,
                 }
                 upload_config = {
                     "configurable": {"thread_id": f"{session_id or 'stream'}_upload"}
@@ -446,13 +453,13 @@ async def chat_stream(
                     synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"
                     store.add_message(conversation_id, "user", synthetic_user)
                     store.add_message(conversation_id, "assistant", upload_summary)
-                    conv = store.get_conversation(conversation_id)
+                    conv = store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
-                        store.update_title(conversation_id, uploaded_filenames[0][:60])
+                        store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
                     mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
-                    ])
+                    ], user_id=user_id)
                 complete_event = ChatStreamEvent(
                     event="complete",
                     data={
@@ -482,7 +489,7 @@ async def chat_stream(
                 "current_step": 0,
                 "completed_steps": [],
                 "react_max_steps": 5,
-                "user_id": "default_user",
+                "user_id": user_id,
             }
             chat_config = {"configurable": {"thread_id": session_id or "default"}}
 
@@ -533,27 +540,27 @@ async def chat_stream(
                     synthetic_user = f"[Attached: {', '.join(uploaded_filenames)}]"
                     store.add_message(conversation_id, "user", synthetic_user)
                     store.add_message(conversation_id, "assistant", upload_summary)
-                    conv = store.get_conversation(conversation_id)
+                    conv = store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation":
-                        store.update_title(conversation_id, uploaded_filenames[0][:60])
+                        store.update_title(conversation_id, uploaded_filenames[0][:60], user_id=user_id)
                     mem0.add_turn([
                         {"role": "user", "content": synthetic_user},
                         {"role": "assistant", "content": upload_summary},
-                    ])
+                    ], user_id=user_id)
                 else:
                     # Normal text message (with or without files)
                     if original_message:
                         store.add_message(conversation_id, "user", original_message)
                     if response_text:
                         store.add_message(conversation_id, "assistant", response_text)
-                    conv = store.get_conversation(conversation_id)
+                    conv = store.get_conversation(conversation_id, user_id=user_id)
                     if conv and conv["title"] == "New conversation" and original_message:
-                        store.update_title(conversation_id, original_message[:60].strip())
+                        store.update_title(conversation_id, original_message[:60].strip(), user_id=user_id)
                     if original_message and response_text:
                         mem0.add_turn([
                             {"role": "user", "content": original_message},
                             {"role": "assistant", "content": response_text},
-                        ])
+                        ], user_id=user_id)
 
             processing_time = time.time() - start_time
 

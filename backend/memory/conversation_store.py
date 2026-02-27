@@ -33,6 +33,7 @@ class ConversationStore:
                 """
                 CREATE TABLE IF NOT EXISTS conversations (
                     id         TEXT PRIMARY KEY,
+                    user_id    TEXT NOT NULL,
                     title      TEXT NOT NULL DEFAULT 'New conversation',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -54,44 +55,48 @@ class ConversationStore:
 
     # ── Conversation CRUD ────────────────────────────────────────────────────
 
-    def create_conversation(self, title: str = "New conversation") -> dict:
+    def create_conversation(self, user_id: str, title: str = "New conversation") -> dict:
         conv_id = str(uuid.uuid4())
         now = _now()
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO conversations (id, title, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?)",
-                (conv_id, title, now, now),
+                "INSERT INTO conversations (id, user_id, title, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (conv_id, user_id, title, now, now),
             )
         return {"id": conv_id, "title": title, "created_at": now, "updated_at": now}
 
-    def list_conversations(self) -> list[dict]:
+    def list_conversations(self, user_id: str) -> list[dict]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, title, created_at, updated_at "
-                "FROM conversations ORDER BY updated_at DESC"
+                "FROM conversations WHERE user_id = ? ORDER BY updated_at DESC",
+                (user_id,),
             ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_conversation(self, conv_id: str) -> dict | None:
+    def get_conversation(self, conv_id: str, user_id: str) -> dict | None:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, title, created_at, updated_at "
-                "FROM conversations WHERE id = ?",
-                (conv_id,),
+                "FROM conversations WHERE id = ? AND user_id = ?",
+                (conv_id, user_id),
             ).fetchone()
         return dict(row) if row else None
 
-    def update_title(self, conv_id: str, title: str):
+    def update_title(self, conv_id: str, title: str, user_id: str):
         with self._connect() as conn:
             conn.execute(
-                "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
-                (title, _now(), conv_id),
+                "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                (title, _now(), conv_id, user_id),
             )
 
-    def delete_conversation(self, conv_id: str):
+    def delete_conversation(self, conv_id: str, user_id: str):
         with self._connect() as conn:
-            conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+            conn.execute(
+                "DELETE FROM conversations WHERE id = ? AND user_id = ?",
+                (conv_id, user_id),
+            )
 
     # ── Message CRUD ─────────────────────────────────────────────────────────
 

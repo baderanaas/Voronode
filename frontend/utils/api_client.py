@@ -17,11 +17,20 @@ class APIClient:
     def __init__(self, base_url: str = "http://localhost:8080"):
         self.base_url = base_url
         self.timeout = 3600
+        self.token: str | None = None
+
+    def _auth_headers(self) -> dict:
+        if self.token:
+            return {"Authorization": f"Bearer {self.token}"}
+        return {}
 
     def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         """Make HTTP request with error handling."""
         url = f"{self.base_url}{endpoint}"
         kwargs.setdefault("timeout", self.timeout)
+        if self.token:
+            existing = kwargs.get("headers", {})
+            kwargs["headers"] = {**self._auth_headers(), **existing}
 
         try:
             response = requests.request(method, url, **kwargs)
@@ -165,6 +174,34 @@ class APIClient:
         response = _self._request("GET", f"/api/budgets/{budget_id}/variance")
         return response.json()
 
+    # Authentication
+    def login(self, username: str, password: str) -> str:
+        """POST /api/auth/login. Returns access_token."""
+        response = self._request(
+            "POST",
+            "/api/auth/login",
+            data={"username": username, "password": password},
+        )
+        token = response.json()["access_token"]
+        self.token = token
+        return token
+
+    def register(self, username: str, password: str) -> str:
+        """POST /api/auth/register. Returns access_token."""
+        response = self._request(
+            "POST",
+            "/api/auth/register",
+            json={"username": username, "password": password},
+        )
+        token = response.json().get("access_token", "")
+        self.token = token
+        return token
+
+    def me(self) -> Dict[str, Any]:
+        """GET /api/auth/me. Returns {id, username}."""
+        response = self._request("GET", "/api/auth/me")
+        return response.json()
+
     # Conversation management
     def create_conversation(self) -> Dict[str, Any]:
         """Create a new empty conversation."""
@@ -264,6 +301,7 @@ class APIClient:
                 url,
                 data=data,
                 files=multipart_files,
+                headers=self._auth_headers(),
                 stream=True,
                 timeout=self.timeout,
             ) as resp:

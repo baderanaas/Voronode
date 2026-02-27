@@ -50,23 +50,23 @@ class Mem0Client:
 
         self._memory = _instance
 
-    def add_turn(self, messages: list[dict]):
+    def add_turn(self, messages: list[dict], user_id: str = "default_user"):
         """Extract and store facts from a conversation turn."""
         if not self._memory:
             return
         try:
-            self._memory.add(messages, user_id="default_user")
+            self._memory.add(messages, user_id=user_id)
         except Exception as exc:
             logger.warning("mem0_add_failed", error=str(exc))
 
-    def search(self, query: str, limit: int | None = None) -> str:
+    def search(self, query: str, limit: int | None = None, user_id: str = "default_user") -> str:
         """Return top memories as a bullet-point string, capped at max_chars."""
         if not self._memory or not query:
             return ""
         effective_limit = limit if limit is not None else settings.memory_search_limit
         try:
             results = self._memory.search(
-                query, user_id="default_user", limit=effective_limit
+                query, user_id=user_id, limit=effective_limit
             )
             memories = (
                 results if isinstance(results, list) else results.get("results", [])

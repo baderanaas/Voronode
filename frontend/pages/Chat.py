@@ -17,7 +17,15 @@ sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
 
-api = APIClient()
+# ── Auth guard ────────────────────────────────────────────────────────────────
+if not st.session_state.get("token"):
+    st.rerun()
+
+if "api" not in st.session_state:
+    st.session_state.api = APIClient()
+
+api: APIClient = st.session_state.api
+api.token = st.session_state.token
 
 # ── Session state ─────────────────────────────────────────────────────────────
 for key, default in [
@@ -83,6 +91,16 @@ def render_assistant_message(msg: dict):
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
+    username = st.session_state.get("username", "")
+    if username:
+        st.caption(f"Logged in as **{username}**")
+    if st.button("Logout", use_container_width=True):
+        st.session_state.token = None
+        st.session_state.chat_messages = []
+        st.session_state.current_conversation_id = None
+        st.session_state.conversations = []
+        st.rerun()
+
     st.markdown("### 💬 Conversations")
 
     if st.button("+ New conversation", use_container_width=True):

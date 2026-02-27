@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     memory_search_limit: int = 5         # Mem0 memories injected per request
     memory_max_chars: int = 1500         # cap on total memory text
 
+    # JWT Authentication
+    jwt_secret_key: str = "change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expiry_minutes: int = 60 * 24  # 24 hours
+
     # General
     log_level: str = "INFO"
 

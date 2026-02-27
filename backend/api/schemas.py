@@ -266,3 +266,28 @@ class UpdateTitleRequest(BaseModel):
     """Request body for PATCH /conversations/{id}/title."""
 
     title: str
+
+
+# Auth schemas
+
+
+class RegisterRequest(BaseModel):
+    """Request body for POST /auth/register."""
+
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """Response from POST /auth/login."""
+
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserResponse(BaseModel):
+    """Authenticated user info."""
+
+    id: str
+    username: str
+    access_token: str | None = None
