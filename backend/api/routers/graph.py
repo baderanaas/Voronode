@@ -5,9 +5,12 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.auth.dependencies import get_current_user
+from backend.core.cache import TTLCache
 from backend.graph.client import Neo4jClient
 
 router = APIRouter(prefix="/graph", tags=["graph"])
+
+_stats_cache = TTLCache(ttl=60)
 logger = structlog.get_logger()
 
 # Labels whose nodes carry a user_id property (mirrors CypherQueryTool)
@@ -61,6 +64,12 @@ def _inject_user_filter(cypher: str, user_id: str) -> tuple[str, dict]:
 async def get_graph_stats(current_user: dict = Depends(get_current_user)):
     """Get Neo4j graph database statistics scoped to the current user."""
     user_id = current_user["id"]
+
+    cached = _stats_cache.get(user_id)
+    if cached is not None:
+        logger.debug("graph_stats_cache_hit", user_id=user_id)
+        return cached
+
     logger.info("graph_stats_requested", user_id=user_id)
     try:
         neo4j_client = Neo4jClient()
@@ -106,6 +115,7 @@ async def get_graph_stats(current_user: dict = Depends(get_current_user)):
                 stats[f"{label.lower()}_count"] = result["count"]
 
         logger.info("graph_stats_retrieved", stats=stats)
+        _stats_cache.set(user_id, stats)
         return stats
     except Exception as e:
         logger.error("graph_stats_failed", error=str(e))

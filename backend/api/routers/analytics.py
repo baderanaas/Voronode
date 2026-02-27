@@ -10,11 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from neo4j.time import Date as Neo4jDate
 
 from backend.auth.dependencies import get_current_user
+from backend.core.cache import TTLCache
 from backend.graph.client import Neo4jClient
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+_dashboard_cache = TTLCache(ttl=60)
 
 
 def _to_float(value) -> float:
@@ -55,6 +58,12 @@ async def get_analytics_dashboard(
     }
     """
     user_id = current_user["id"]
+
+    cached = _dashboard_cache.get(user_id)
+    if cached is not None:
+        logger.debug("analytics_dashboard_cache_hit", user_id=user_id)
+        return cached
+
     logger.info("analytics_dashboard_requested", user_id=user_id)
 
     try:
@@ -190,7 +199,7 @@ async def get_analytics_dashboard(
         budgets=len(budgets),
     )
 
-    return {
+    result = {
         "summary": {
             "total_invoices": len(invoice_rows),
             "total_invoice_value": total_invoice_value,
@@ -211,3 +220,5 @@ async def get_analytics_dashboard(
         },
         "budget_summary": budgets,
     }
+    _dashboard_cache.set(user_id, result)
+    return result

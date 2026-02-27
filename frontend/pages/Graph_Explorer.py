@@ -6,6 +6,7 @@ Visualize and query the Neo4j knowledge graph.
 
 import streamlit as st
 import sys
+import time
 from pathlib import Path
 import networkx as nx
 import plotly.graph_objects as go
@@ -17,6 +18,22 @@ sys.path.insert(0, str(frontend_path))
 
 from utils.api_client import APIClient
 from utils.formatters import format_currency, format_date
+
+_STATS_TTL = 60  # seconds
+
+
+def _load_graph_stats(api: APIClient) -> dict:
+    """Return graph stats from session-state cache, re-fetching when stale."""
+    now = time.monotonic()
+    cached_at = st.session_state.get("_graph_stats_cached_at", 0)
+    cached = st.session_state.get("_graph_stats")
+    if cached is not None and (now - cached_at) < _STATS_TTL:
+        return cached
+    data = api.get_graph_stats()
+    st.session_state["_graph_stats"] = data
+    st.session_state["_graph_stats_cached_at"] = now
+    return data
+
 
 st.title("🔍 Graph Explorer")
 st.markdown("Visualize relationships in the knowledge graph.")
@@ -494,7 +511,7 @@ with tab3:
     st.markdown("### Graph Statistics")
 
     try:
-        stats = api.get_graph_stats()
+        stats = _load_graph_stats(api)
 
         col1, col2, col3 = st.columns(3)
 
@@ -541,7 +558,7 @@ with st.sidebar:
     st.markdown("### 🔍 Graph Info")
 
     try:
-        stats = api.get_graph_stats()
+        stats = _load_graph_stats(api)
 
         st.metric("Total Nodes", stats.get("total_nodes", 0))
         st.metric("Relationships", stats.get("total_relationships", 0))

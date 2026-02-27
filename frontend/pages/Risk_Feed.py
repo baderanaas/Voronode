@@ -6,6 +6,7 @@ Real-time monitoring of invoice processing and risk alerts.
 
 import streamlit as st
 import sys
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -33,6 +34,8 @@ col1, col2, col3 = st.columns([1, 1, 4])
 
 with col1:
     if st.button("🔄 Refresh"):
+        st.session_state.pop("_risk_stats", None)
+        st.session_state.pop("_risk_stats_at", None)
         api.clear_cache()
         st.rerun()
 
@@ -51,8 +54,15 @@ st.markdown("---")
 st.markdown("## 📊 System Overview")
 
 try:
-    # Get graph stats
-    graph_stats = api.get_graph_stats()
+    # Get graph stats (session-state cache, 60s TTL)
+    _now = time.monotonic()
+    if (
+        st.session_state.get("_risk_stats") is None
+        or (_now - st.session_state.get("_risk_stats_at", 0)) >= 60
+    ):
+        st.session_state["_risk_stats"] = api.get_graph_stats()
+        st.session_state["_risk_stats_at"] = _now
+    graph_stats = st.session_state["_risk_stats"]
 
     # Get workflow stats
     all_workflows = api.list_workflows()

@@ -6,6 +6,7 @@ All data is scoped to the authenticated user.
 """
 
 import sys
+import time
 from pathlib import Path
 
 import plotly.graph_objects as go
@@ -17,6 +18,22 @@ sys.path.insert(0, str(frontend_path))
 from utils.api_client import APIClient
 from utils.formatters import format_currency
 
+_CACHE_TTL = 60  # seconds
+
+
+def _load_dashboard(api: APIClient) -> dict:
+    """Return analytics data from session-state cache, re-fetching when stale."""
+    now = time.monotonic()
+    cached_at = st.session_state.get("_analytics_cached_at", 0)
+    cached_data = st.session_state.get("_analytics_data")
+    if cached_data is not None and (now - cached_at) < _CACHE_TTL:
+        return cached_data
+    data = api.get_analytics_dashboard()
+    st.session_state["_analytics_data"] = data
+    st.session_state["_analytics_cached_at"] = now
+    return data
+
+
 st.title("Analytics Dashboard")
 st.markdown("Budget variance, contractor spend, and invoice aging — scoped to your data.")
 
@@ -24,14 +41,15 @@ api = APIClient()
 api.token = st.session_state.get("token")
 
 if st.button("Refresh"):
-    api.clear_cache()
+    st.session_state.pop("_analytics_data", None)
+    st.session_state.pop("_analytics_cached_at", None)
     st.rerun()
 
 st.divider()
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 try:
-    data = api.get_analytics_dashboard()
+    data = _load_dashboard(api)
 except Exception as e:
     st.error(f"Failed to load analytics: {e}")
     st.stop()

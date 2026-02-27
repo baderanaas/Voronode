@@ -105,10 +105,9 @@ class APIClient:
         )
         return response.json()
 
-    @st.cache_data(ttl=60)
-    def get_graph_stats(_self) -> Dict[str, Any]:
+    def get_graph_stats(self) -> Dict[str, Any]:
         """Get graph database statistics."""
-        response = _self._request("GET", "/api/graph/stats")
+        response = self._request("GET", "/api/graph/stats")
         return response.json()
 
     @st.cache_data(ttl=120)
@@ -118,10 +117,9 @@ class APIClient:
         return response.json()
 
     # Analytics
-    @st.cache_data(ttl=60)
-    def get_analytics_dashboard(_self) -> Dict[str, Any]:
+    def get_analytics_dashboard(self) -> Dict[str, Any]:
         """Get all analytics dashboard data in one request."""
-        response = _self._request("GET", "/api/analytics/dashboard")
+        response = self._request("GET", "/api/analytics/dashboard")
         return response.json()
 
     # Invoice Data
@@ -144,22 +142,19 @@ class APIClient:
         response = _self._request("GET", f"/api/contracts/{contract_id}")
         return response.json()
 
-    @st.cache_data(ttl=300)
-    def get_budget(_self, budget_id: str) -> Dict[str, Any]:
+    def get_budget(self, budget_id: str) -> Dict[str, Any]:
         """Get budget details."""
-        response = _self._request("GET", f"/api/budgets/{budget_id}")
+        response = self._request("GET", f"/api/budgets/{budget_id}")
         return response.json()
 
-    @st.cache_data(ttl=300)
-    def get_project_budgets(_self, project_id: str) -> Dict[str, Any]:
+    def get_project_budgets(self, project_id: str) -> Dict[str, Any]:
         """Get all budgets for a project."""
-        response = _self._request("GET", f"/api/budgets/project/{project_id}")
+        response = self._request("GET", f"/api/budgets/project/{project_id}")
         return response.json()
 
-    @st.cache_data(ttl=300)
-    def get_budget_variance(_self, budget_id: str) -> Dict[str, Any]:
+    def get_budget_variance(self, budget_id: str) -> Dict[str, Any]:
         """Get budget variance analysis."""
-        response = _self._request("GET", f"/api/budgets/{budget_id}/variance")
+        response = self._request("GET", f"/api/budgets/{budget_id}/variance")
         return response.json()
 
     # Authentication

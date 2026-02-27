@@ -9,17 +9,26 @@ from backend.api.schemas import (
     BudgetLineResponse,
     BudgetVarianceResponse,
 )
+from backend.core.cache import TTLCache
 from backend.services.graph_builder import GraphBuilder
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
 logger = structlog.get_logger()
 
 _graph_builder = GraphBuilder()
+_budget_cache = TTLCache(ttl=120)
+_project_budgets_cache = TTLCache(ttl=120)
+_variance_cache = TTLCache(ttl=120)
 
 
 @router.get("/{budget_id}", response_model=BudgetDetailResponse)
 async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
     """Get budget details by ID."""
+    cached = _budget_cache.get(budget_id)
+    if cached is not None:
+        logger.debug("budget_detail_cache_hit", budget_id=budget_id)
+        return cached
+
     logger.info("budget_detail_requested", budget_id=budget_id)
     try:
         budget_data = _graph_builder.get_budget_by_id(budget_id)
@@ -41,7 +50,7 @@ async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
             )
             for line in budget_data["budget_lines"]
         ]
-        return BudgetDetailResponse(
+        result = BudgetDetailResponse(
             id=budget_data["id"],
             project_id=budget_data["project_id"],
             project_name=budget_data["project_name"],
@@ -52,6 +61,8 @@ async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
             status=budget_data["status"],
             budget_lines=budget_lines,
         )
+        _budget_cache.set(budget_id, result)
+        return result
     except HTTPException:
         raise
     except Exception as e:
@@ -62,14 +73,21 @@ async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
 @router.get("/project/{project_id}")
 async def get_project_budgets(project_id: str, _: dict = Depends(get_current_user)):
     """Get all budgets for a project."""
+    cached = _project_budgets_cache.get(project_id)
+    if cached is not None:
+        logger.debug("project_budgets_cache_hit", project_id=project_id)
+        return cached
+
     logger.info("project_budgets_requested", project_id=project_id)
     try:
         budgets = _graph_builder.get_budgets_by_project(project_id)
-        return {
+        result = {
             "project_id": project_id,
             "budget_count": len(budgets),
             "budgets": budgets,
         }
+        _project_budgets_cache.set(project_id, result)
+        return result
     except Exception as e:
         logger.error("project_budgets_failed", project_id=project_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to retrieve budgets: {e}")
@@ -78,6 +96,11 @@ async def get_project_budgets(project_id: str, _: dict = Depends(get_current_use
 @router.get("/{budget_id}/variance", response_model=BudgetVarianceResponse)
 async def get_budget_variance(budget_id: str, _: dict = Depends(get_current_user)):
     """Calculate budget variance (budget vs actual spend)."""
+    cached = _variance_cache.get(budget_id)
+    if cached is not None:
+        logger.debug("budget_variance_cache_hit", budget_id=budget_id)
+        return cached
+
     logger.info("budget_variance_requested", budget_id=budget_id)
     try:
         budget_data = _graph_builder.get_budget_by_id(budget_id)
@@ -118,7 +141,7 @@ async def get_budget_variance(budget_id: str, _: dict = Depends(get_current_user
             if utilization_pct > 90:
                 at_risk_lines.append(line["cost_code"])
 
-        return BudgetVarianceResponse(
+        result = BudgetVarianceResponse(
             budget_id=budget_id,
             project_id=budget_data["project_id"],
             project_name=budget_data["project_name"],
@@ -129,6 +152,8 @@ async def get_budget_variance(budget_id: str, _: dict = Depends(get_current_user
             underrun_lines=underrun_lines,
             at_risk_lines=at_risk_lines,
         )
+        _variance_cache.set(budget_id, result)
+        return result
     except HTTPException:
         raise
     except Exception as e:
