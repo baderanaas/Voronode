@@ -68,7 +68,7 @@ The backend is a FastAPI application built around two LangGraph pipelines: a **m
          ┌────────────────┼────────────────┐
          ▼                ▼                ▼
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│   Neo4j      │  │  ChromaDB    │  │   SQLite     │
+│   Neo4j      │  │  ChromaDB    │  │  Postgres    │
 │  Graph DB    │  │  Vectors     │  │ Convs · Auth │
 │  Invoices    │  │  Embeddings  │  │ Checkpoints  │
 │  Contracts   │  │  Semantic    │  │              │
@@ -116,19 +116,20 @@ backend/
 │       └── config.py
 │
 ├── auth/
-│   ├── user_store.py            ← SQLite users table
+│   ├── user_store.py            ← Postgres users table
 │   ├── utils.py                 ← JWT encode/decode + bcrypt hashing
 │   └── dependencies.py          ← get_current_user FastAPI dependency
 │
 ├── core/
 │   ├── config.py                ← Pydantic settings (loaded from .env)
+│   ├── db.py                    ← Shared ConnectionPool — open_pool(), close_pool(), init_db()
 │   ├── models.py                ← Invoice, LineItem, Contract, Budget Pydantic models
 │   ├── state.py                 ← WorkflowState TypedDict
 │   ├── logging.py               ← Shim → voronode_logging package
 │   └── circuit_breaker.py      ← Per-tool circuit breaker manager
 │
 ├── memory/
-│   ├── conversation_store.py    ← SQLite CRUD for conversation history
+│   ├── conversation_store.py    ← Postgres CRUD for conversation history
 │   └── mem0_client.py           ← Mem0 semantic memory (user_id scoped)
 │
 ├── services/
@@ -172,7 +173,7 @@ Key characteristics:
 - **Groq Llama 3.3 70B** for fast invoice structuring from raw text
 - Critic loop: anomalies trigger LLM-generated feedback and re-extraction (up to 3 retries)
 - Risk-based routing: low → proceed, medium → retry, high/critical → quarantine
-- SQLite checkpointing enables pause/resume for quarantined documents
+- Postgres checkpointing enables pause/resume for quarantined documents
 - All nodes are non-fatal for ChromaDB (embed failure doesn't block graph insert)
 
 See [`ingestion/README.md`](ingestion/README.md) for full details.
@@ -213,7 +214,7 @@ Every piece of data is scoped by `user_id`:
 - **Neo4j**: All Invoice, Contract, Budget, Project nodes have a `user_id` property
 - **ChromaDB**: Metadata filters on `user_id` in every collection
 - **Mem0**: Facts stored and retrieved per `user_id`
-- **SQLite**: Conversations table has `user_id NOT NULL` column
+- **Postgres**: Conversations, messages, and users tables all have `user_id NOT NULL`
 - **API**: `user_id` sourced from JWT `sub` claim via `get_current_user()`
 
 ---
@@ -231,6 +232,7 @@ uvicorn backend.api.main:app --reload --port 8000
 Required environment variables (see `backend/core/config.py` for full list):
 
 ```
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/voronode
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=...

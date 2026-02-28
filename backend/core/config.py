@@ -48,8 +48,6 @@ class Settings(BaseSettings):
 
     # Workflow configuration
     workflow_max_retries: int = 3
-    workflow_checkpoint_db: str = "workflow_checkpoints.db"
-    workflow_state_db: str = "workflow_states.db"
     workflow_quarantine_high_risk: bool = True
 
     # Compliance Auditor
@@ -60,8 +58,10 @@ class Settings(BaseSettings):
     compliance_critical_threshold: int = 1
     compliance_high_threshold: int = 2
 
+    # Database (Postgres — replaces all SQLite databases)
+    database_url: str = "postgresql://postgres:postgres@localhost:5432/voronode"
+
     # Memory / conversation persistence
-    sqlite_db_path: str = "data/conversations.db"
     conversation_window_size: int = 10   # recent messages sent to planner
     memory_search_limit: int = 5         # Mem0 memories injected per request
     memory_max_chars: int = 1500         # cap on total memory text

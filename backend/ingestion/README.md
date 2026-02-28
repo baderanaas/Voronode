@@ -76,7 +76,7 @@ END
 | `quarantine` | current state | `status=quarantined`, `paused=true` | Halts for human review |
 | `insert_graph` | `extracted_data`, `user_id` | `neo4j_id`, `graph_updated` | MERGE-based idempotent |
 | `embed_vector` | `extracted_data` | — | Non-fatal; skipped if fails |
-| `finalize` | final state | `final_report`, `status=completed` | Saves SQLite checkpoint |
+| `finalize` | final state | `final_report`, `status=completed` | Saves Postgres checkpoint |
 | `error_handler` | `error` | `status=failed` | Critical failures only |
 
 ---
@@ -157,7 +157,7 @@ Contract violations detected during `compliance_audit`:
 
 ## Checkpointing & Quarantine
 
-- State is checkpointed to SQLite at each node (`settings.workflow_checkpoint_db`)
+- State is checkpointed to Postgres at each node via `PostgresSaver` (`settings.database_url`)
 - Quarantined documents are surfaced via `GET /api/workflows/quarantined`
 - Human reviewers can correct and resume via `POST /api/workflows/{document_id}/resume`
 - The workflow reloads the last checkpoint and continues from the quarantine node

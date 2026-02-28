@@ -68,6 +68,12 @@ variable "jwt_secret_key" {
   sensitive   = true
 }
 
+variable "neon_database_url" {
+  description = "Neon Postgres connection string"
+  type        = string
+  sensitive   = true
+}
+
 # --- LLM model names ---
 
 variable "groq_model" {

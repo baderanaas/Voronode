@@ -66,6 +66,10 @@ resource "azurerm_container_app" "backend" {
     name  = "jwt-secret-key"
     value = var.jwt_secret_key
   }
+  secret {
+    name  = "neon-database-url"
+    value = var.neon_database_url
+  }
 
   template {
     min_replicas = 0
@@ -99,18 +103,10 @@ resource "azurerm_container_app" "backend" {
         value = "8000"
       }
 
-      # SQLite — local ephemeral disk (fast, no locking issues)
+      # Postgres (Neon) — persistent cloud database
       env {
-        name  = "SQLITE_DB_PATH"
-        value = "/tmp/conversations.db"
-      }
-      env {
-        name  = "WORKFLOW_CHECKPOINT_DB"
-        value = "/tmp/workflow_checkpoints.db"
-      }
-      env {
-        name  = "WORKFLOW_STATE_DB"
-        value = "/tmp/workflow_states.db"
+        name        = "DATABASE_URL"
+        secret_name = "neon-database-url"
       }
 
       # API keys

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.core.config import settings
+from backend.core.db import open_pool, close_pool, init_db
 from voronode_logging import VoronodeLogger, CorrelationMiddleware, get_logger
 
 VoronodeLogger.configure("voronode-api", level=settings.log_level)
@@ -39,12 +40,16 @@ app.include_router(router, prefix="/api")
 async def startup_event():
     """Run on application startup."""
     logger.info("voronode_api_starting", version="0.2.0")
+    open_pool()
+    init_db()
+    logger.info("db_pool_ready")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     logger.info("voronode_api_shutting_down")
+    close_pool()
 
 
 # Root endpoint

@@ -1,5 +1,6 @@
 """Integration tests for complete invoice workflow execution."""
 
+import json
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
@@ -65,7 +66,6 @@ def test_create_workflow_graph():
     graph = create_invoice_workflow_graph()
 
     assert graph is not None
-    # Verify nodes are added
     nodes = graph.nodes
     assert "extract_text" in nodes
     assert "structure_invoice" in nodes
@@ -78,20 +78,23 @@ def test_create_workflow_graph():
     assert "error_handler" in nodes
 
 
-@patch("backend.ingestion.pipeline.invoice_workflow.sqlite3")
-@patch("backend.ingestion.pipeline.invoice_workflow.SqliteSaver")
-def test_compile_workflow_with_checkpoints(mock_saver, mock_sqlite):
+@patch("backend.ingestion.pipeline.invoice_workflow.psycopg")
+@patch("backend.ingestion.pipeline.invoice_workflow.PostgresSaver")
+def test_compile_workflow_with_checkpoints(mock_saver, mock_psycopg):
     """Test workflow compilation with checkpointing."""
     from langgraph.checkpoint.memory import MemorySaver
 
-    # The code calls SqliteSaver(conn) directly (constructor, not from_conn_string)
-    # Return a real BaseCheckpointSaver subclass so LangGraph's isinstance check passes
-    mock_saver.return_value = MemorySaver()
+    # PostgresSaver(conn) must return a real BaseCheckpointSaver subclass so
+    # LangGraph's isinstance check passes
+    mock_saver_instance = MemorySaver()
+    mock_saver_instance.setup = Mock()
+    mock_saver.return_value = mock_saver_instance
 
-    workflow = compile_workflow_with_checkpoints("test_checkpoints.db")
+    workflow = compile_workflow_with_checkpoints()
 
     assert workflow is not None
-    mock_saver.assert_called_once()  # Verifies SqliteSaver was instantiated
+    mock_saver.assert_called_once()
+    mock_saver_instance.setup.assert_called_once()
 
 
 @patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
@@ -101,33 +104,22 @@ def test_compile_workflow_with_checkpoints(mock_saver, mock_sqlite):
 def test_clean_invoice_workflow(
     mock_chroma, mock_graph, mock_validator, mock_extractor, mock_invoice_data
 ):
-    """
-    Test workflow with clean invoice (no anomalies).
-
-    Expected path: extract_text → structure_invoice → validate → insert_graph → embed → finalize
-    """
-    # Mock extractor
+    """Test workflow with clean invoice (no anomalies)."""
     mock_extractor_instance = Mock()
     mock_extractor_instance.extract_text_from_pdf.return_value = "Sample invoice text"
     mock_extractor_instance.structure_invoice.return_value = mock_invoice_data
     mock_extractor.return_value = mock_extractor_instance
 
-    # Mock validator (no anomalies)
     mock_validator_instance = Mock()
     mock_validator_instance.validate_invoice.return_value = []
     mock_validator.return_value = mock_validator_instance
 
-    # Mock graph builder
     mock_graph_instance = Mock()
     mock_graph_instance.insert_invoice.return_value = "neo4j-123"
     mock_graph.return_value = mock_graph_instance
 
-    # Mock ChromaDB
-    mock_chroma_instance = Mock()
-    mock_chroma.return_value = mock_chroma_instance
+    mock_chroma.return_value = Mock()
 
-    # Note: Full integration test would require actual LangGraph execution
-    # This test verifies mocks are set up correctly
     assert mock_extractor_instance.extract_text_from_pdf("test.pdf") == "Sample invoice text"
     assert mock_validator_instance.validate_invoice(Mock()) == []
 
@@ -135,18 +127,12 @@ def test_clean_invoice_workflow(
 @patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
 @patch("backend.ingestion.pipeline.nodes.InvoiceValidator")
 def test_high_risk_quarantine_workflow(mock_validator, mock_extractor, mock_invoice_data):
-    """
-    Test workflow with high-risk invoice gets quarantined.
-
-    Expected path: extract_text → structure_invoice → validate → quarantine (END)
-    """
-    # Mock extractor
+    """Test workflow with high-risk invoice gets quarantined."""
     mock_extractor_instance = Mock()
     mock_extractor_instance.extract_text_from_pdf.return_value = "Sample invoice text"
     mock_extractor_instance.structure_invoice.return_value = mock_invoice_data
     mock_extractor.return_value = mock_extractor_instance
 
-    # Mock validator with high-severity anomalies
     mock_anomaly = Mock()
     mock_anomaly.severity = "high"
     mock_anomaly.to_dict.return_value = {
@@ -162,7 +148,6 @@ def test_high_risk_quarantine_workflow(mock_validator, mock_extractor, mock_invo
     mock_validator_instance.validate_invoice.return_value = [mock_anomaly, mock_anomaly]
     mock_validator.return_value = mock_validator_instance
 
-    # Verify high severity anomalies detected
     anomalies = mock_validator_instance.validate_invoice(Mock())
     assert len(anomalies) == 2
     assert all(a.severity == "high" for a in anomalies)
@@ -170,16 +155,9 @@ def test_high_risk_quarantine_workflow(mock_validator, mock_extractor, mock_invo
 
 @patch("backend.ingestion.pipeline.nodes.InvoiceExtractor")
 def test_extraction_retry_with_critic(mock_extractor):
-    """
-    Test workflow retries extraction with critic feedback.
-
-    Expected path: extract_text → structure_invoice (fail) → critic → structure_invoice (retry)
-    """
-    # Mock extractor
+    """Test workflow retries extraction with critic feedback."""
     mock_extractor_instance = Mock()
     mock_extractor_instance.extract_text_from_pdf.return_value = "Sample invoice text"
-
-    # First call fails, second succeeds
     mock_extractor_instance.structure_invoice.side_effect = [
         ValueError("Failed to extract"),
         {
@@ -190,24 +168,24 @@ def test_extraction_retry_with_critic(mock_extractor):
             "line_items": [],
         },
     ]
-
     mock_extractor.return_value = mock_extractor_instance
 
-    # Verify retry behavior
     try:
         mock_extractor_instance.structure_invoice("text")
     except ValueError:
-        pass  # First call fails
+        pass
 
     result = mock_extractor_instance.structure_invoice("text with feedback")
     assert result["invoice_number"] == "INV-2024-0001"
 
 
-def test_workflow_state_persistence():
-    """Test that workflow state is persisted to SQLite."""
+@patch("backend.storage.workflow_store.get_pool")
+def test_workflow_state_persistence(mock_get_pool):
+    """Test that workflow state is persisted via WorkflowStore."""
     from backend.storage.workflow_store import WorkflowStore
 
-    store = WorkflowStore(db_path="test_workflow_states.db")
+    # get_pool().connection().__enter__() is what "conn" resolves to
+    mock_conn = mock_get_pool.return_value.connection.return_value.__enter__.return_value
 
     test_state = {
         "document_id": "test-persistence-123",
@@ -216,28 +194,36 @@ def test_workflow_state_persistence():
         "risk_level": "low",
         "retry_count": 0,
     }
+    mock_conn.execute.return_value.fetchone.return_value = {
+        "document_id": "test-persistence-123",
+        "user_id": None,
+        "status": "processing",
+        "paused": False,
+        "risk_level": "low",
+        "retry_count": 0,
+        "state_json": json.dumps(test_state),
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "updated_at": "2024-01-01T00:00:00+00:00",
+    }
 
-    # Save state
+    store = WorkflowStore(db_path="test_workflow_states.db")
     store.save_workflow("test-persistence-123", test_state)
-
-    # Retrieve state
     retrieved = store.get_workflow("test-persistence-123")
 
     assert retrieved is not None
     assert retrieved["document_id"] == "test-persistence-123"
     assert retrieved["status"] == "processing"
 
-    # Clean up
     store.delete_workflow("test-persistence-123")
 
 
-def test_quarantine_retrieval():
+@patch("backend.storage.workflow_store.get_pool")
+def test_quarantine_retrieval(mock_get_pool):
     """Test retrieving quarantined workflows."""
     from backend.storage.workflow_store import WorkflowStore
 
-    store = WorkflowStore(db_path="test_workflow_states.db")
+    mock_conn = mock_get_pool.return_value.connection.return_value.__enter__.return_value
 
-    # Create quarantined workflow
     quarantined_state = {
         "document_id": "test-quarantine-123",
         "status": "quarantined",
@@ -245,16 +231,26 @@ def test_quarantine_retrieval():
         "risk_level": "high",
         "retry_count": 0,
     }
+    mock_conn.execute.return_value.fetchall.return_value = [
+        {
+            "document_id": "test-quarantine-123",
+            "status": "quarantined",
+            "paused": True,
+            "risk_level": "high",
+            "retry_count": 0,
+            "state_json": json.dumps(quarantined_state),
+            "created_at": "2024-01-01T00:00:00+00:00",
+            "updated_at": "2024-01-01T00:00:00+00:00",
+        }
+    ]
 
+    store = WorkflowStore(db_path="test_workflow_states.db")
     store.save_workflow("test-quarantine-123", quarantined_state)
-
-    # Retrieve quarantined workflows
     quarantined = store.get_all_quarantined()
 
     assert len(quarantined) > 0
     assert any(w["document_id"] == "test-quarantine-123" for w in quarantined)
 
-    # Clean up
     store.delete_workflow("test-quarantine-123")
 
 
@@ -262,7 +258,6 @@ def test_quarantine_retrieval():
 @patch("backend.storage.workflow_store.WorkflowStore")
 def test_workflow_manager_execute_sync(mock_store, mock_compile):
     """Test WorkflowManager synchronous execution."""
-    # Mock compiled workflow
     mock_workflow = Mock()
     mock_final_state = {
         "document_id": "test-manager-123",
@@ -276,17 +271,11 @@ def test_workflow_manager_execute_sync(mock_store, mock_compile):
         {"extract_text": {"raw_text": "text"}},
         {"finalize": mock_final_state},
     ]
-
     mock_compile.return_value = mock_workflow
+    mock_store.return_value = Mock()
 
-    # Mock store
-    mock_store_instance = Mock()
-    mock_store.return_value = mock_store_instance
-
-    # Execute workflow
     manager = WorkflowManager()
     result = manager.execute_sync(Path("/tmp/test.pdf"))
 
     assert result is not None
-    # Workflow should have been called
     mock_workflow.stream.assert_called_once()

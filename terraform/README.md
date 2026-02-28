@@ -35,7 +35,7 @@ Internet (HTTPS)
 | Azure Container Apps | Frontend (Streamlit) + Backend (FastAPI) — scales to zero when idle |
 | Azure Container Instances | Neo4j + ChromaDB — always-on, persistent storage |
 | Azure Container Registry | Docker image storage (backend, frontend, neo4j, chromadb) |
-| Azure Storage Account | 4 file shares: neo4j-data, neo4j-logs, chroma-data, sqlite-data |
+| Azure Storage Account | 3 file shares: neo4j-data, neo4j-logs, chroma-data |
 | Azure Key Vault | API secrets — accessed by apps via managed identity |
 | Azure Log Analytics | Centralised logs for Container Apps |
 | Azure Application Insights | Request tracing and metrics |
@@ -101,6 +101,7 @@ Required values in `terraform.tfvars`:
 | `tavily_api_key` | Tavily search key (leave `""` if unused) |
 | `jwt_secret_key` | Random string for JWT signing |
 | `neo4j_password` | Password for the Neo4j database |
+| `neon_database_url` | Neon Postgres connection string (e.g. `postgresql://user:pass@ep-xxx.neon.tech/voronode?sslmode=require`) |
 | `backend_image` | Fill in after Step 2 |
 | `frontend_image` | Fill in after Step 2 |
 
@@ -179,7 +180,7 @@ This creates (in dependency order):
 3. Log Analytics + Application Insights
 4. Neo4j + ChromaDB container instances (with persistent Azure Files volumes)
 5. Container Apps environment
-6. Backend Container App (internal ingress, SQLite on Azure Files)
+6. Backend Container App (internal ingress, `DATABASE_URL` wired from Key Vault)
 7. Frontend Container App (public HTTPS ingress)
 
 ---
@@ -275,5 +276,5 @@ In Azure, Neo4j and ChromaDB are replaced by the Container Instances in `databas
 - **Container Apps** use the shared consumption plan (no VNet) — scales to zero when idle.
 - **Neo4j and ChromaDB** run as Container Instances with public IPs. The backend reaches them via their IPs, which Terraform injects as environment variables at deploy time.
 - **Secrets** are stored in Key Vault and referenced by the backend Container App via managed identity — they never appear in plain text in the Container App config.
-- **SQLite databases** run on local ephemeral container disk (`/tmp`). Data is lost on container restart. Azure Files SMB is incompatible with SQLite's POSIX file locking.
+- **Postgres** (Neon) is used for all structured state: users, conversations, messages, workflow states, and LangGraph checkpoints. The connection string is stored in Key Vault and injected as `DATABASE_URL`. Data persists across container restarts.
 - If ACI IPs change after a redeploy, run `terraform apply` to update the backend env vars automatically.

@@ -13,6 +13,8 @@ anthropic_api_key = "sk-ant-..."
 tavily_api_key    = ""
 jwt_secret_key    = "change-me-use-a-long-random-string"
 
+neon_database_url = "postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/voronode?sslmode=require"
+
 neo4j_password = "change-me"
 
 # LLM models (defaults match config.py — only set to override)

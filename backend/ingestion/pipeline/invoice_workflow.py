@@ -1,12 +1,12 @@
 """LangGraph StateGraph definition for invoice processing workflow."""
 
 import os
-import sqlite3
 from typing import Optional
 from backend.core.logging import get_logger
 
+import psycopg
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 
 from backend.core.state import WorkflowState
 from backend.ingestion.pipeline.nodes import (
@@ -122,28 +122,21 @@ def create_invoice_workflow_graph() -> StateGraph:
     return workflow
 
 
-def compile_workflow_with_checkpoints(
-    checkpoint_path: Optional[str] = None,
-) -> StateGraph:
+def compile_workflow_with_checkpoints() -> StateGraph:
     """
-    Compile the workflow with SQLite checkpoint persistence.
-
-    Args:
-        checkpoint_path: Path to SQLite checkpoint DB (defaults to settings)
+    Compile the workflow with Postgres checkpoint persistence.
 
     Returns:
         Compiled workflow with checkpointing enabled
     """
-    if checkpoint_path is None:
-        checkpoint_path = settings.workflow_checkpoint_db
-
-    logger.info("compiling_workflow_with_checkpoints", checkpoint_path=checkpoint_path)
+    logger.info("compiling_workflow_with_checkpoints")
 
     workflow = create_invoice_workflow_graph()
 
-    # Create checkpoint saver with a persistent connection
-    conn = sqlite3.connect(checkpoint_path, check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
+    # Create checkpoint saver backed by Postgres
+    conn = psycopg.connect(settings.database_url)
+    checkpointer = PostgresSaver(conn)
+    checkpointer.setup()  # idempotent — creates LangGraph tables on first run
 
     # Compile workflow
     compiled_workflow = workflow.compile(checkpointer=checkpointer)

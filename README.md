@@ -34,7 +34,7 @@ AI-powered autonomous financial risk and compliance system for construction fina
        │                                  │
 ┌──────▼──────────────────────────────────▼─────────────────────────┐
 │  Data Layer                                                        │
-│  Neo4j (knowledge graph)  ·  ChromaDB (vectors)  ·  SQLite (state)│
+│  Neo4j (knowledge graph)  ·  ChromaDB (vectors)  ·  Postgres (state)│
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -126,6 +126,7 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 TAVILY_API_KEY=tvly-xxx       # optional, enables web search
 
 # Databases
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/voronode
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=voronode123
@@ -134,8 +135,6 @@ CHROMADB_PORT=8000
 
 # Workflow
 WORKFLOW_MAX_RETRIES=3
-WORKFLOW_CHECKPOINT_DB=workflow_checkpoints.db
-WORKFLOW_STATE_DB=workflow_states.db
 WORKFLOW_QUARANTINE_HIGH_RISK=true
 
 # Compliance thresholds
@@ -174,11 +173,12 @@ voronode/
 │   │   └── routers/               # auth, chat, conversations, workflows,
 │   │                              #   graph, analytics, budgets, health
 │   ├── auth/
-│   │   ├── user_store.py          # SQLite user CRUD
+│   │   ├── user_store.py          # Postgres user CRUD
 │   │   ├── utils.py               # JWT encode/decode, bcrypt hashing
 │   │   └── dependencies.py        # FastAPI get_current_user() Depends
 │   ├── core/
 │   │   ├── config.py              # Pydantic settings from .env
+│   │   ├── db.py                  # Connection pool (open/close/init_db)
 │   │   ├── models.py              # Domain models (Invoice, Contract, …)
 │   │   ├── state.py               # ConversationState TypedDict
 │   │   └── circuit_breaker.py     # CircuitBreaker per tool
@@ -190,7 +190,7 @@ voronode/
 │   │   ├── budget_extractor.py    # Budget PDF/Excel → structured data
 │   │   └── pipeline/              # LangGraph ingestion workflow nodes
 │   ├── memory/
-│   │   ├── conversation_store.py  # SQLite CRUD (conversations + messages)
+│   │   ├── conversation_store.py  # Postgres CRUD (conversations + messages)
 │   │   └── mem0_client.py         # Mem0 semantic memory (ChromaDB-backed)
 │   ├── services/
 │   │   ├── llm_client.py          # Multi-LLM wrapper with retry backoff
@@ -223,7 +223,7 @@ voronode/
 ├── docker/
 │   └── docker-compose.yml         # Neo4j + ChromaDB containers
 ├── scripts/                       # Setup & test data generation
-├── data/                          # conversations.db (git-ignored)
+├── data/                          # local scratch (git-ignored)
 └── pyproject.toml
 ```
 
@@ -403,12 +403,14 @@ All nodes include a `user_id` property for tenant isolation.
 
 **Relationships**: `ISSUED_BY`, `FOR_PROJECT`, `CONTAINS_ITEM`, `MAPS_TO`, `BINDS`, `HAS_BUDGET`
 
-### SQLite (`data/conversations.db`)
+### Postgres (`DATABASE_URL`)
 
 ```sql
-users         (id, username, hashed_pw, created_at)
-conversations (id, user_id, title, created_at, updated_at)
-messages      (id, conversation_id, role, content, created_at)
+users         (id TEXT, username TEXT UNIQUE, hashed_pw TEXT, created_at TIMESTAMPTZ)
+conversations (id TEXT, user_id TEXT, title TEXT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)
+messages      (id TEXT, conversation_id TEXT REFERENCES conversations, role TEXT, content TEXT, created_at TIMESTAMPTZ)
+workflow_states (document_id TEXT, user_id TEXT, status TEXT, paused BOOLEAN, risk_level TEXT, retry_count INT, state_json TEXT, created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ)
+-- LangGraph internal tables (checkpoints, writes, migrations) created by PostgresSaver.setup()
 ```
 
 ### ChromaDB collections
@@ -421,12 +423,15 @@ messages      (id, conversation_id, role, content, created_at)
 
 **Workflow stuck in "processing"**
 ```bash
-sqlite3 workflow_checkpoints.db "SELECT * FROM checkpoints;"
-# If corrupted: rm workflow_checkpoints.db
+# Check LangGraph checkpoint tables in your Postgres DB (e.g. via Neon console)
+# Tables: checkpoints, checkpoint_writes, checkpoint_migrations
 ```
 
 **Database connection failures**
 ```bash
+# Verify DATABASE_URL is set correctly in .env
+uv run python -c "import psycopg; psycopg.connect('$DATABASE_URL'); print('OK')"
+
 cd docker && docker-compose restart
 docker logs voronode-neo4j
 docker logs voronode-chromadb
@@ -435,7 +440,7 @@ docker logs voronode-chromadb
 **Import errors after install**
 ```bash
 uv sync
-uv run python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('OK')"
+uv run python -c "from langgraph.checkpoint.postgres import PostgresSaver; print('OK')"
 ```
 
 ---
@@ -450,7 +455,7 @@ uv run python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('OK
 - Phase 4B: Contract Compliance Auditor
 - Multi-agent conversational AI (Planner → Executor → Validator → Responder)
 - JWT authentication & per-user data isolation
-- Persistent memory (Mem0 + SQLite conversation store)
+- Persistent memory (Mem0 + Postgres conversation store)
 
 ### Planned
 - [ ] React / Next.js frontend migration
@@ -464,4 +469,4 @@ uv run python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('OK
 
 ---
 
-**Stack:** FastAPI · LangGraph · Streamlit · Neo4j · ChromaDB · Gemini · OpenAI · Anthropic · Groq · Mem0 · python-jose
+**Stack:** FastAPI · LangGraph · Streamlit · Neo4j · ChromaDB · Neon Postgres · Gemini · OpenAI · Anthropic · Groq · Mem0 · python-jose
