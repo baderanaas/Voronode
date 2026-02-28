@@ -233,9 +233,14 @@ az container stop --name aci-chromadb-voronode --resource-group rg-voronode-dev
 ```bash
 az container start --name aci-neo4j-voronode --resource-group rg-voronode-dev
 az container start --name aci-chromadb-voronode --resource-group rg-voronode-dev
+
+az containerapp update --name ca-backend-voronode --resource-group rg-voronode-dev \
+    --set-env-vars \
+      "NEO4J_URI=bolt://neo4j-voronode.westeurope.azurecontainer.io:7687" \
+      "CHROMADB_HOST=chromadb-voronode.westeurope.azurecontainer.io"
 ```
 
-Container Apps will spin up automatically on the next incoming request.
+ACI containers get new public IPs on each restart — the `containerapp update` repoints the backend using stable FQDNs. Container Apps spin up automatically on the next incoming request.
 
 ### Update a secret (e.g. rotate an API key)
 
