@@ -127,8 +127,8 @@ def compile_workflow_with_checkpoints() -> StateGraph:
     """
     workflow = create_invoice_workflow_graph()
 
-    # Create checkpoint saver backed by Postgres
-    conn = psycopg.connect(settings.database_url)
+    # Create checkpoint saver backed by Postgres.
+    conn = psycopg.connect(settings.database_url, autocommit=True)
     checkpointer = PostgresSaver(conn)
     checkpointer.setup()  # idempotent — creates LangGraph tables on first run
 
