@@ -32,7 +32,7 @@ def get_workflow_manager() -> WorkflowManager:
 async def get_quarantined_workflows(current_user: dict = Depends(get_current_user)):
     """Get all workflows awaiting human review."""
     user_id = current_user["id"]
-    logger.info("quarantined_workflows_requested", user_id=user_id)
+    logger.debug("quarantined_workflows_requested", user_id=user_id)
     try:
         workflows = get_workflow_manager().get_quarantined_workflows(user_id=user_id)
         responses = []
@@ -51,7 +51,7 @@ async def get_quarantined_workflows(current_user: dict = Depends(get_current_use
                     updated_at=wf["updated_at"],
                 )
             )
-        logger.info("quarantined_workflows_retrieved", count=len(responses))
+        logger.debug("quarantined_workflows_retrieved", count=len(responses))
         return responses
     except Exception as e:
         logger.error("quarantined_workflows_failed", error=str(e))
@@ -68,7 +68,7 @@ async def resume_workflow(
 ):
     """Resume a quarantined workflow with human feedback."""
     user_id = current_user["id"]
-    logger.info(
+    logger.debug(
         "workflow_resume_requested",
         document_id=document_id,
         approved=request.approved,
@@ -116,7 +116,7 @@ async def get_workflow_status(
 ):
     """Get current workflow status."""
     user_id = current_user["id"]
-    logger.info("workflow_status_requested", document_id=document_id, user_id=user_id)
+    logger.debug("workflow_status_requested", document_id=document_id, user_id=user_id)
     try:
         workflow = get_workflow_manager().get_workflow_status(document_id)
         if not workflow:
@@ -152,7 +152,7 @@ async def list_workflows(
 ):
     """List all workflows, optionally filtered by status."""
     user_id = current_user["id"]
-    logger.info("workflows_list_requested", status=status, limit=limit, user_id=user_id)
+    logger.debug("workflows_list_requested", status=status, limit=limit, user_id=user_id)
     try:
         return get_workflow_manager().list_workflows(
             status=status, limit=limit, user_id=user_id
@@ -168,7 +168,7 @@ async def get_workflow(
 ):
     """Get detailed workflow information by ID."""
     user_id = current_user["id"]
-    logger.info("workflow_get_requested", workflow_id=workflow_id, user_id=user_id)
+    logger.debug("workflow_get_requested", workflow_id=workflow_id, user_id=user_id)
     try:
         workflow = get_workflow_manager().get_workflow_status(workflow_id)
         if not workflow:

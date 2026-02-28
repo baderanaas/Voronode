@@ -59,7 +59,7 @@ class VectorSearchTool:
         # Extract search query from action or use query
         search_query = action if action else query
 
-        logger.info(
+        logger.debug(
             "vector_search_executing",
             query=search_query[:100],
             collection=collection,
@@ -90,7 +90,7 @@ class VectorSearchTool:
                         "rank": idx + 1,
                     })
 
-            logger.info("vector_search_complete", result_count=len(formatted_results))
+            logger.debug("vector_search_complete", result_count=len(formatted_results))
 
             return {
                 "query": search_query,

@@ -38,7 +38,7 @@ class InvoiceUploadTool:
         Returns:
             Dict with status, invoice_id, invoice_number, amount, requires_review, summary
         """
-        logger.info("invoice_upload_tool_run", action=action[:100])
+        logger.debug("invoice_upload_tool_run", action=action[:100])
 
         parsed = self._parse_action(action)
         command = parsed["command"]
@@ -119,7 +119,7 @@ class InvoiceUploadTool:
                         "contractor_id": invoice.contractor_id,
                     },
                 )
-                logger.info("invoice_upload_tool_embedded", invoice_id=invoice_id)
+                logger.debug("invoice_upload_tool_embedded", invoice_id=invoice_id)
             except Exception as embed_err:
                 logger.warning("invoice_upload_tool_embed_failed", error=str(embed_err))
 
@@ -132,7 +132,7 @@ class InvoiceUploadTool:
             elif anomalies:
                 summary += f" {len(anomalies)} minor anomaly(ies) noted."
 
-            logger.info(
+            logger.debug(
                 "invoice_upload_tool_success",
                 invoice_id=invoice_id,
                 invoice_number=invoice.invoice_number,

@@ -57,10 +57,10 @@ class PlannerAgent:
             memories=memories,
         )
 
-        logger.info("planner_analyzing_query", query=user_message[:100])
+        logger.debug("planner_analyzing_query", query=user_message[:100])
         result = self.llm.extract_json(prompt, temperature=0.2)
 
-        logger.info(
+        logger.debug(
             "planner_decision",
             route=result.get("route"),
             execution_mode=result.get("execution_mode"),
@@ -99,10 +99,10 @@ class PlannerAgent:
             retry_count=retry_count,
         )
 
-        logger.info("planner_retrying_with_feedback", retry_count=retry_count)
+        logger.debug("planner_retrying_with_feedback", retry_count=retry_count)
         result = self.llm.extract_json(prompt, temperature=0.3)
 
-        logger.info(
+        logger.debug(
             "planner_retry_decision",
             route=result.get("route"),
             retry_count=retry_count,
@@ -148,10 +148,10 @@ class PlannerAgent:
             current_results=current_results,
         )
 
-        logger.info("planner_react_planning_next_step", completed_steps=len(completed_steps))
+        logger.debug("planner_react_planning_next_step", completed_steps=len(completed_steps))
         result = self.llm.extract_json(prompt, temperature=0.2)
 
-        logger.info(
+        logger.debug(
             "planner_react_decision",
             continue_execution=result.get("continue"),
             step_count=len(completed_steps),

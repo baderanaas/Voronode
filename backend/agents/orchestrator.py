@@ -33,7 +33,7 @@ def planner_node(state: ConversationState) -> ConversationState:
     """
     planner = PlannerAgent()
 
-    logger.info(
+    logger.debug(
         "planner_node_executing", has_feedback=bool(state.get("validation_feedback"))
     )
 
@@ -57,7 +57,7 @@ def planner_node(state: ConversationState) -> ConversationState:
 
     else:
         # Initial planning
-        logger.info("planner_initial", query=state["user_query"][:100])
+        logger.debug("planner_initial", query=state["user_query"][:100])
 
         output = planner.analyze(
             user_message=state["user_query"],
@@ -84,7 +84,7 @@ def planner_node(state: ConversationState) -> ConversationState:
 
     # Generic responses and clarifications are formatted by responder_node
 
-    logger.info(
+    logger.debug(
         "planner_node_complete",
         route=state["route"],
         execution_mode=state.get("execution_mode"),
@@ -105,7 +105,7 @@ def executor_node(state: ConversationState) -> ConversationState:
 
     execution_mode = state.get("execution_mode", "one_way")
 
-    logger.info("executor_node_executing", mode=execution_mode)
+    logger.debug("executor_node_executing", mode=execution_mode)
 
     user_id = state.get("user_id", "default_user")
 
@@ -165,7 +165,7 @@ def executor_node(state: ConversationState) -> ConversationState:
             },
         }
 
-    logger.info(
+    logger.debug(
         "executor_node_complete",
         mode=execution_mode,
         status=state["execution_results"].get("status"),
@@ -183,7 +183,7 @@ def upload_agent_node(state: ConversationState) -> ConversationState:
     """
     upload_agent = UploadAgent()
 
-    logger.info("upload_agent_node_executing")
+    logger.debug("upload_agent_node_executing")
 
     plan = state["planner_output"].get("plan", {})
 
@@ -195,7 +195,7 @@ def upload_agent_node(state: ConversationState) -> ConversationState:
 
     state["execution_results"] = results
 
-    logger.info(
+    logger.debug(
         "upload_agent_node_complete",
         status=results.get("status"),
         steps_completed=results.get("metadata", {}).get("steps_completed"),
@@ -212,7 +212,7 @@ def planner_react_node(state: ConversationState) -> ConversationState:
     """
     planner = PlannerAgent()
 
-    logger.info("planner_react_node_executing", current_step=state["current_step"])
+    logger.debug("planner_react_node_executing", current_step=state["current_step"])
 
     # Get strategy from initial plan
     strategy = (
@@ -234,9 +234,9 @@ def planner_react_node(state: ConversationState) -> ConversationState:
 
     if state["react_continue"]:
         state["next_step"] = next_step_decision.get("next_step", {})
-        logger.info("planner_react_continue", next_tool=state["next_step"].get("tool"))
+        logger.debug("planner_react_continue", next_tool=state["next_step"].get("tool"))
     else:
-        logger.info("planner_react_done", total_steps=len(state["completed_steps"]))
+        logger.debug("planner_react_done", total_steps=len(state["completed_steps"]))
 
     return state
 
@@ -249,7 +249,7 @@ def validator_node(state: ConversationState) -> ConversationState:
     """
     validator = ValidatorAgent()
 
-    logger.info("validator_node_executing")
+    logger.debug("validator_node_executing")
 
     validation = validator.validate(
         user_query=state["user_query"],
@@ -273,7 +273,7 @@ def validator_node(state: ConversationState) -> ConversationState:
             retry_count=state.get("retry_count", 0),
         )
     else:
-        logger.info("validator_passed")
+        logger.debug("validator_passed")
 
     return state
 
@@ -289,7 +289,7 @@ def responder_node(state: ConversationState) -> ConversationState:
     """
     responder = ResponderAgent()
 
-    logger.info("responder_node_executing", route=state["route"])
+    logger.debug("responder_node_executing", route=state["route"])
 
     # Check route type
     if state["route"] == "generic_response":
@@ -334,7 +334,7 @@ def responder_node(state: ConversationState) -> ConversationState:
     state["display_format"] = formatted.get("display_format", "text")
     state["display_data"] = formatted.get("data")
 
-    logger.info(
+    logger.debug(
         "responder_node_complete",
         format=state["display_format"],
         has_data=bool(state["display_data"]),
@@ -352,19 +352,19 @@ def route_after_planner(state: ConversationState) -> str:
 
     if route == "generic_response":
         # Generic responses (greetings, out-of-scope) go to Responder (fast path)
-        logger.info("route_fast_path", route=route)
+        logger.debug("route_fast_path", route=route)
         return "responder"
     elif route == "clarification":
         # Clarification questions go to Responder (fast path)
-        logger.info("route_fast_path", route=route)
+        logger.debug("route_fast_path", route=route)
         return "responder"
     elif route == "execution_plan":
         # Data queries go to Executor
-        logger.info("route_execution", mode=state.get("execution_mode"))
+        logger.debug("route_execution", mode=state.get("execution_mode"))
         return "executor"
     elif route == "upload_plan":
         # Document uploads go to UploadAgent
-        logger.info("route_upload")
+        logger.debug("route_upload")
         return "upload_agent"
 
     # Default to responder
@@ -377,7 +377,7 @@ def route_after_executor(state: ConversationState) -> str:
 
     if execution_mode == "one_way":
         # One-way done → validate
-        logger.info("route_to_validator", mode="one_way")
+        logger.debug("route_to_validator", mode="one_way")
         return "validator"
 
     elif execution_mode == "react":
@@ -387,13 +387,13 @@ def route_after_executor(state: ConversationState) -> str:
 
         if current_step >= max_steps:
             # Max steps reached → validate
-            logger.info(
+            logger.debug(
                 "route_to_validator", reason="max_steps_reached", steps=current_step
             )
             return "validator"
 
         # Ask planner for next step
-        logger.info("route_to_planner_react", current_step=current_step)
+        logger.debug("route_to_planner_react", current_step=current_step)
         return "planner_react"
 
     return "validator"
@@ -403,11 +403,11 @@ def route_after_planner_react(state: ConversationState) -> str:
     """Route after ReAct planning."""
     if state.get("react_continue", False):
         # Continue ReAct loop
-        logger.info("route_react_continue")
+        logger.debug("route_react_continue")
         return "executor"
     else:
         # Done → validate
-        logger.info("route_react_done")
+        logger.debug("route_react_done")
         return "validator"
 
 
@@ -418,17 +418,17 @@ def route_after_validator(state: ConversationState) -> str:
 
     if is_valid:
         # Valid results → format response
-        logger.info("route_to_responder", reason="valid")
+        logger.debug("route_to_responder", reason="valid")
         return "responder"
     else:
         # Check retry count
         if retry_count < 2:
             # Retry with feedback
-            logger.info("route_retry", retry_count=retry_count)
+            logger.debug("route_retry", retry_count=retry_count)
             return "planner"
         else:
             # Max retries → format error
-            logger.info("route_to_responder", reason="max_retries")
+            logger.debug("route_to_responder", reason="max_retries")
             return "responder"
 
 
@@ -442,8 +442,6 @@ def create_multi_agent_graph():
     Returns:
         Compiled LangGraph workflow with checkpointer
     """
-    logger.info("creating_multi_agent_graph")
-
     # Create workflow
     workflow = StateGraph(ConversationState)
 
@@ -505,7 +503,5 @@ def create_multi_agent_graph():
     # Compile with checkpointer
     checkpointer = MemorySaver()
     compiled_graph = workflow.compile(checkpointer=checkpointer)
-
-    logger.info("multi_agent_graph_created")
 
     return compiled_graph

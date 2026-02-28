@@ -48,7 +48,7 @@ class CalculatorTool:
                 "status": "success" | "failed"
             }
         """
-        logger.info("calculator_executing", action=action[:100])
+        logger.debug("calculator_executing", action=action[:100])
 
         # Extract data from context if not provided directly
         if not data and context and context.get("previous_results"):
@@ -143,7 +143,7 @@ class CalculatorTool:
 
         total = sum(values)
 
-        logger.info("calculator_sum", total=total, count=len(values))
+        logger.debug("calculator_sum", total=total, count=len(values))
 
         return {
             "calculation": "sum",
@@ -165,7 +165,7 @@ class CalculatorTool:
 
         avg = statistics.mean(values)
 
-        logger.info("calculator_average", average=avg, count=len(values))
+        logger.debug("calculator_average", average=avg, count=len(values))
 
         return {
             "calculation": "average",
@@ -189,7 +189,7 @@ class CalculatorTool:
         variance = statistics.variance(values)
         std_dev = statistics.stdev(values)
 
-        logger.info("calculator_variance", variance=variance, std_dev=std_dev)
+        logger.debug("calculator_variance", variance=variance, std_dev=std_dev)
 
         return {
             "calculation": "variance",
@@ -227,7 +227,7 @@ class CalculatorTool:
 
         result = sorted_values[lower_index] * (1 - weight) + sorted_values[upper_index] * weight
 
-        logger.info("calculator_percentile", percentile=percentile, result=result)
+        logger.debug("calculator_percentile", percentile=percentile, result=result)
 
         return {
             "calculation": f"{percentile}th percentile",

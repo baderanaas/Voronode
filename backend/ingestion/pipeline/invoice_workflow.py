@@ -52,8 +52,6 @@ def create_invoice_workflow_graph() -> StateGraph:
     Returns:
         Compiled StateGraph
     """
-    logger.info("creating_invoice_workflow_graph")
-
     workflow = StateGraph(WorkflowState)
 
     # Add nodes
@@ -117,8 +115,6 @@ def create_invoice_workflow_graph() -> StateGraph:
     workflow.add_edge("quarantine", END)
     workflow.add_edge("error_handler", END)
 
-    logger.info("invoice_workflow_graph_created")
-
     return workflow
 
 
@@ -129,8 +125,6 @@ def compile_workflow_with_checkpoints() -> StateGraph:
     Returns:
         Compiled workflow with checkpointing enabled
     """
-    logger.info("compiling_workflow_with_checkpoints")
-
     workflow = create_invoice_workflow_graph()
 
     # Create checkpoint saver backed by Postgres
@@ -140,8 +134,6 @@ def compile_workflow_with_checkpoints() -> StateGraph:
 
     # Compile workflow
     compiled_workflow = workflow.compile(checkpointer=checkpointer)
-
-    logger.info("workflow_compiled_successfully")
 
     return compiled_workflow
 

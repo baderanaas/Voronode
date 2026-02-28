@@ -37,7 +37,7 @@ class ContractUploadTool:
         Returns:
             Dict with status, contract_id, contractor_name, value, summary
         """
-        logger.info("contract_upload_tool_run", action=action[:100])
+        logger.debug("contract_upload_tool_run", action=action[:100])
 
         parsed = self._parse_action(action)
         command = parsed["command"]
@@ -97,7 +97,7 @@ class ContractUploadTool:
             if warnings:
                 summary += f" {len(warnings)} extraction warning(s) noted."
 
-            logger.info(
+            logger.debug(
                 "contract_upload_tool_success",
                 contract_id=contract_id,
                 contractor_name=contract.contractor_name,

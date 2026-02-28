@@ -84,7 +84,7 @@ async def chat(
                 temp_paths.append(tmp_path)
                 uploaded_filenames.append(uploaded_file.filename)
                 file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
-                logger.info(
+                logger.debug(
                     "chat_upload_temp_saved",
                     filename=uploaded_file.filename,
                     path=tmp_path,
@@ -150,7 +150,7 @@ async def chat(
                     "file_count": count,
                     "retry_count": final_upload_state.get("retry_count", 0),
                 }
-                logger.info(
+                logger.debug(
                     "chat_upload_complete",
                     processing_time=metadata["processing_time_seconds"],
                 )
@@ -196,7 +196,7 @@ async def chat(
             response_text = planner_text
             display_format = upload_display_format
             display_data = upload_display_data
-            logger.info("chat_generic_shortcut", session_id=session_id)
+            logger.debug("chat_generic_shortcut", session_id=session_id)
         else:
             response_text = final_state.get("final_response", "")
             display_format = final_state.get("display_format", "text")
@@ -209,7 +209,7 @@ async def chat(
             "react_steps": len(final_state.get("completed_steps", [])),
         }
 
-        logger.info(
+        logger.debug(
             "chat_request_complete",
             route=route,
             execution_mode=execution_mode,
@@ -372,7 +372,7 @@ async def chat_stream(
                     temp_paths.append(tmp_path)
                     uploaded_filenames.append(uploaded_file.filename)
                     file_descriptions.append(f"- {uploaded_file.filename} → {tmp_path}")
-                    logger.info(
+                    logger.debug(
                         "chat_stream_temp_saved",
                         filename=uploaded_file.filename,
                         path=tmp_path,
@@ -519,7 +519,7 @@ async def chat_stream(
                             },
                             timestamp=datetime.now(timezone.utc),
                         )
-                        logger.info(
+                        logger.debug(
                             "chat_stream_generic_shortcut", session_id=session_id
                         )
                         yield f"data: {shortcut_event.model_dump_json()}\n\n"
@@ -573,7 +573,7 @@ async def chat_stream(
                 timestamp=datetime.now(timezone.utc),
             )
             yield f"data: {complete_event.model_dump_json()}\n\n"
-            logger.info(
+            logger.debug(
                 "chat_stream_complete",
                 processing_time=processing_time,
                 session_id=session_id,

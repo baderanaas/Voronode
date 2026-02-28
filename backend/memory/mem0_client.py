@@ -46,7 +46,6 @@ class Mem0Client:
             }
             try:
                 _instance = Memory.from_config(config)
-                logger.info("mem0_initialized")
             except Exception as exc:
                 logger.error("mem0_init_failed", error=str(exc))
                 _instance = _FAILED

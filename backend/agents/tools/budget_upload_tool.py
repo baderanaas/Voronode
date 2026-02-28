@@ -38,7 +38,7 @@ class BudgetUploadTool:
         Returns:
             Dict with status, budget_id, project_name, total_allocated, summary
         """
-        logger.info("budget_upload_tool_run", action=action[:100])
+        logger.debug("budget_upload_tool_run", action=action[:100])
 
         parsed = self._parse_action(action)
         command = parsed["command"]
@@ -120,7 +120,7 @@ class BudgetUploadTool:
             if budget.validation_warnings:
                 summary += f" {len(budget.validation_warnings)} validation warning(s) noted."
 
-            logger.info(
+            logger.debug(
                 "budget_upload_tool_success",
                 budget_id=budget_id,
                 project_name=budget.project_name,

@@ -58,7 +58,7 @@ class ValidatorAgent:
                 "metadata": {...}  # Execution metadata
             }
         """
-        logger.info("validator_checking_quality", query=user_query[:100])
+        logger.debug("validator_checking_quality", query=user_query[:100])
 
         # Check 1: Results exist
         if not execution_results.get("results"):
@@ -105,7 +105,7 @@ class ValidatorAgent:
             }
 
         # All checks passed!
-        logger.info("validator_passed")
+        logger.debug("validator_passed")
         return {
             "valid": True,
             "metadata": execution_results.get("metadata", {}),
@@ -180,10 +180,10 @@ class ValidatorAgent:
         }}
         """
 
-        logger.info("validator_llm_checking")
+        logger.debug("validator_llm_checking")
         result = self.llm.extract_json(prompt, temperature=0.1)
 
-        logger.info(
+        logger.debug(
             "validator_llm_result",
             valid=result.get("overall_valid"),
             issues_count=len(result.get("issues", [])),

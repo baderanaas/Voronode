@@ -37,7 +37,7 @@ class GraphBuilder:
         Raises:
             ValueError: If insertion fails
         """
-        logger.info(
+        logger.debug(
             "starting_graph_insertion",
             invoice_number=invoice.invoice_number,
             contractor_id=invoice.contractor_id,
@@ -46,17 +46,17 @@ class GraphBuilder:
         try:
             # Step 1: Ensure contractor exists
             contractor_id = self._ensure_contractor(invoice.contractor_id)
-            logger.info("contractor_resolved", contractor_id=contractor_id)
+            logger.debug("contractor_resolved", contractor_id=contractor_id)
 
             # Step 2: Create invoice node
             invoice_id = self._create_invoice_node(invoice, contractor_id, user_id)
-            logger.info("invoice_node_created", invoice_id=invoice_id)
+            logger.debug("invoice_node_created", invoice_id=invoice_id)
 
             # Step 3: Create line items
             for item in invoice.line_items:
                 self._create_line_item(invoice_id, item)
 
-            logger.info(
+            logger.debug(
                 "graph_insertion_complete",
                 invoice_id=invoice_id,
                 line_items=len(invoice.line_items),
@@ -116,7 +116,7 @@ class GraphBuilder:
 
         result = self.neo4j_client.run_query(create_query, params)
 
-        logger.info(
+        logger.debug(
             "placeholder_contractor_created",
             contractor_id=contractor_id,
             name=name_or_id,
@@ -253,7 +253,7 @@ class GraphBuilder:
         Returns:
             Contract ID
         """
-        logger.info(
+        logger.debug(
             "starting_contract_insertion",
             contract_id=contract.id,
             contractor_id=contract.contractor_id,
@@ -263,13 +263,13 @@ class GraphBuilder:
             # Step 1: Ensure contractor exists
             contractor_name = contract.contractor_name or contract.contractor_id
             contractor_id = self._ensure_contractor(contractor_name)
-            logger.info("contractor_resolved", contractor_id=contractor_id)
+            logger.debug("contractor_resolved", contractor_id=contractor_id)
 
             # Step 2: Ensure project exists
             project_id = self._ensure_project(
                 contract.project_id, contract.project_name
             )
-            logger.info("project_resolved", project_id=project_id)
+            logger.debug("project_resolved", project_id=project_id)
 
             # Step 3: Create contract node
             # Neo4j doesn't support nested maps, so serialize unit_price_schedule as JSON
@@ -346,7 +346,7 @@ class GraphBuilder:
             if not result:
                 raise ValueError("Failed to create contract node")
 
-            logger.info(
+            logger.debug(
                 "contract_insertion_complete",
                 contract_id=contract.id,
             )
@@ -404,7 +404,7 @@ class GraphBuilder:
 
         result = self.neo4j_client.run_query(create_query, params)
 
-        logger.info(
+        logger.debug(
             "placeholder_project_created",
             project_id=project_id,
             name=project_name,
@@ -536,7 +536,7 @@ class GraphBuilder:
         """
         from backend.core.models import Budget, BudgetLine
 
-        logger.info(
+        logger.debug(
             "starting_budget_insertion",
             budget_id=budget.id,
             project_id=budget.project_id,
@@ -546,7 +546,7 @@ class GraphBuilder:
         try:
             # Step 1: Ensure project exists
             project_id = self._ensure_project(budget.project_id, budget.project_name)
-            logger.info("project_resolved", project_id=project_id)
+            logger.debug("project_resolved", project_id=project_id)
 
             # Step 2: Create Budget node
             budget_query = """
@@ -606,7 +606,7 @@ class GraphBuilder:
             for line in budget_lines:
                 self._insert_budget_line(line, budget.id, project_id, user_id)
 
-            logger.info(
+            logger.debug(
                 "budget_insertion_complete",
                 budget_id=budget.id,
                 lines_inserted=len(budget_lines),

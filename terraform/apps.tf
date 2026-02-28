@@ -161,6 +161,10 @@ resource "azurerm_container_app" "backend" {
         name  = "ENV"
         value = "production"
       }
+      env {
+        name  = "LOG_LEVEL"
+        value = "WARNING"
+      }
     }
   }
 

@@ -49,7 +49,6 @@ class UploadAgent:
         except ImportError:
             logger.warning("BudgetUploadTool not available")
 
-        logger.info("upload_agent_tools_initialized", tool_count=len(self.tools))
 
     def execute(
         self,
@@ -79,7 +78,7 @@ class UploadAgent:
             }
         """
         steps = plan.get("steps", [])
-        logger.info("upload_agent_execute_started", steps=len(steps))
+        logger.debug("upload_agent_execute_started", steps=len(steps))
 
         results: List[Dict[str, Any]] = []
         start_time = time.time()
@@ -88,7 +87,7 @@ class UploadAgent:
             tool_name = step.get("tool", "")
             action = step.get("action", "")
 
-            logger.info("upload_agent_step", step=idx + 1, tool=tool_name)
+            logger.debug("upload_agent_step", step=idx + 1, tool=tool_name)
 
             tool = self.tools.get(tool_name)
             if not tool:
@@ -114,7 +113,7 @@ class UploadAgent:
                 results.append(step_result)
 
                 if step_status == "success":
-                    logger.info("upload_agent_step_success", step=idx + 1, tool=tool_name)
+                    logger.debug("upload_agent_step_success", step=idx + 1, tool=tool_name)
                 else:
                     logger.warning(
                         "upload_agent_step_failed",
@@ -148,7 +147,7 @@ class UploadAgent:
         else:
             overall_status = "failure"
 
-        logger.info(
+        logger.debug(
             "upload_agent_execute_complete",
             status=overall_status,
             steps_completed=success_count,

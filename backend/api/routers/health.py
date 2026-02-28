@@ -24,7 +24,8 @@ async def health_check():
         "chromadb": _chroma_client.verify_connectivity(),
     }
     overall_status = "healthy" if all(services_status.values()) else "degraded"
-    logger.info("health_check", status=overall_status, services=services_status)
+    if overall_status == "degraded":
+        logger.warning("health_check_degraded", services=services_status)
     return HealthResponse(
         status=overall_status,
         services=services_status,

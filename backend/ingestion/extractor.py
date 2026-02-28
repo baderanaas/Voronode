@@ -34,7 +34,7 @@ class InvoiceExtractor:
         """
         try:
             # Try pdfplumber first (better for tables/structured content)
-            logger.info("extracting_pdf_text", path=str(pdf_path), method="pdfplumber")
+            logger.debug("extracting_pdf_text", path=str(pdf_path), method="pdfplumber")
             with pdfplumber.open(pdf_path) as pdf:
                 text = ""
                 for page in pdf.pages:
@@ -43,7 +43,7 @@ class InvoiceExtractor:
                         text += page_text + "\n"
 
                 if text.strip():
-                    logger.info(
+                    logger.debug(
                         "pdf_extraction_success",
                         method="pdfplumber",
                         text_length=len(text),
@@ -55,7 +55,7 @@ class InvoiceExtractor:
 
         # Fallback to pypdf
         try:
-            logger.info("extracting_pdf_text", path=str(pdf_path), method="pypdf")
+            logger.debug("extracting_pdf_text", path=str(pdf_path), method="pypdf")
             reader = PdfReader(pdf_path)
             text = ""
             for page in reader.pages:
@@ -64,7 +64,7 @@ class InvoiceExtractor:
                     text += page_text + "\n"
 
             if text.strip():
-                logger.info(
+                logger.debug(
                     "pdf_extraction_success", method="pypdf", text_length=len(text)
                 )
                 return text.strip()
@@ -122,10 +122,10 @@ PDF TEXT:
 Extract the invoice data now:
 """
 
-        logger.info("structuring_invoice_with_llm", text_length=len(raw_text))
+        logger.debug("structuring_invoice_with_llm", text_length=len(raw_text))
         result = self.llm_client.extract_json(prompt=prompt)
 
-        logger.info(
+        logger.debug(
             "invoice_structured",
             invoice_number=result.get("invoice_number"),
             line_items_count=len(result.get("line_items", [])),
@@ -145,7 +145,7 @@ Extract the invoice data now:
         Raises:
             ValueError: If extraction or validation fails
         """
-        logger.info("starting_invoice_extraction", path=str(pdf_path))
+        logger.debug("starting_invoice_extraction", path=str(pdf_path))
 
         # Step 1: Extract text
         raw_text = self.extract_text_from_pdf(pdf_path)
@@ -185,7 +185,7 @@ Extract the invoice data now:
                 extraction_confidence=0.9,  # TODO: Calculate based on validation
             )
 
-            logger.info(
+            logger.debug(
                 "invoice_extraction_complete",
                 invoice_number=invoice.invoice_number,
                 amount=float(invoice.amount),

@@ -63,7 +63,7 @@ class ComplianceCheckTool:
                 "status": "success" | "failed"
             }
         """
-        logger.info("compliance_check_executing", action=action[:100])
+        logger.debug("compliance_check_executing", action=action[:100])
 
         # Extract invoice and contract IDs
         if not invoice_id:
@@ -149,7 +149,7 @@ class ComplianceCheckTool:
                 for a in anomalies
             ]
 
-            logger.info(
+            logger.debug(
                 "compliance_check_complete",
                 invoice_id=invoice_id,
                 violations_count=len(violations),

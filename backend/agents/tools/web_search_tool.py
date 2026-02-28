@@ -38,7 +38,6 @@ class WebSearchTool:
             if tavily_key:
                 from tavily import TavilyClient
                 self.client = TavilyClient(api_key=tavily_key)
-                logger.info("web_search_tool_initialized", provider="tavily")
             else:
                 logger.warning("web_search_tool_no_api_key",
                              message="Tavily API key not configured, web search disabled")
@@ -78,7 +77,7 @@ class WebSearchTool:
         # Use action as search query if provided, otherwise use query
         search_query = action if action else query
 
-        logger.info("web_search_executing", query=search_query[:100])
+        logger.debug("web_search_executing", query=search_query[:100])
 
         # Check if client is available
         if not self.client:
@@ -116,7 +115,7 @@ class WebSearchTool:
             if "answer" in results:
                 response["answer"] = results["answer"]
 
-            logger.info(
+            logger.debug(
                 "web_search_complete",
                 query=search_query[:50],
                 results_count=len(formatted_results),

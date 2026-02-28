@@ -29,7 +29,7 @@ async def get_budget(budget_id: str, _: dict = Depends(get_current_user)):
         logger.debug("budget_detail_cache_hit", budget_id=budget_id)
         return cached
 
-    logger.info("budget_detail_requested", budget_id=budget_id)
+    logger.debug("budget_detail_requested", budget_id=budget_id)
     try:
         budget_data = _graph_builder.get_budget_by_id(budget_id)
         if not budget_data:
@@ -78,7 +78,7 @@ async def get_project_budgets(project_id: str, _: dict = Depends(get_current_use
         logger.debug("project_budgets_cache_hit", project_id=project_id)
         return cached
 
-    logger.info("project_budgets_requested", project_id=project_id)
+    logger.debug("project_budgets_requested", project_id=project_id)
     try:
         budgets = _graph_builder.get_budgets_by_project(project_id)
         result = {
@@ -101,7 +101,7 @@ async def get_budget_variance(budget_id: str, _: dict = Depends(get_current_user
         logger.debug("budget_variance_cache_hit", budget_id=budget_id)
         return cached
 
-    logger.info("budget_variance_requested", budget_id=budget_id)
+    logger.debug("budget_variance_requested", budget_id=budget_id)
     try:
         budget_data = _graph_builder.get_budget_by_id(budget_id)
         if not budget_data:

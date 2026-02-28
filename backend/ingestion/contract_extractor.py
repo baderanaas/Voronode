@@ -29,7 +29,7 @@ class ContractExtractor:
         all data extraction is handled by the LLM.
         """
         try:
-            logger.info("extracting_pdf_text", path=str(pdf_path), method="pdfplumber")
+            logger.debug("extracting_pdf_text", path=str(pdf_path), method="pdfplumber")
             with pdfplumber.open(pdf_path) as pdf:
                 text = ""
                 for page in pdf.pages:
@@ -38,14 +38,14 @@ class ContractExtractor:
                         text += page_text + "\n"
 
                 if text.strip():
-                    logger.info("pdf_extraction_success", method="pdfplumber", text_length=len(text))
+                    logger.debug("pdf_extraction_success", method="pdfplumber", text_length=len(text))
                     return text.strip()
 
         except Exception as e:
             logger.warning("pdfplumber_failed", error=str(e))
 
         try:
-            logger.info("extracting_pdf_text", path=str(pdf_path), method="pypdf")
+            logger.debug("extracting_pdf_text", path=str(pdf_path), method="pypdf")
             reader = PdfReader(pdf_path)
             text = ""
             for page in reader.pages:
@@ -54,7 +54,7 @@ class ContractExtractor:
                     text += page_text + "\n"
 
             if text.strip():
-                logger.info("pdf_extraction_success", method="pypdf", text_length=len(text))
+                logger.debug("pdf_extraction_success", method="pypdf", text_length=len(text))
                 return text.strip()
 
         except Exception as e:
@@ -107,10 +107,10 @@ PDF TEXT:
 Extract the contract data now:
 """
 
-        logger.info("structuring_contract_with_llm", text_length=len(raw_text))
+        logger.debug("structuring_contract_with_llm", text_length=len(raw_text))
         result = self.llm_client.extract_json(prompt=prompt, temperature=0.1)
 
-        logger.info(
+        logger.debug(
             "contract_structured",
             contract_id=result.get("contract_id"),
             cost_codes_count=len(result.get("approved_cost_codes", [])),
@@ -211,7 +211,7 @@ Extract the contract data now:
                 extraction_confidence=0.85 if not warnings else 0.65,
             )
 
-            logger.info(
+            logger.debug(
                 "contract_extraction_complete",
                 contract_id=contract.id,
                 value=float(contract.value),
@@ -238,7 +238,7 @@ Extract the contract data now:
         Raises:
             ValueError: If extraction or validation fails
         """
-        logger.info("starting_contract_extraction", path=str(pdf_path))
+        logger.debug("starting_contract_extraction", path=str(pdf_path))
 
         # Step 1: Extract raw text from PDF
         raw_text = self._extract_text_from_pdf(pdf_path)

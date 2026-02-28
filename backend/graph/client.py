@@ -78,4 +78,3 @@ class Neo4jClient:
                 query = query.strip()
                 if query:
                     session.run(query)
-                    logger.info("migration_query_executed", query=query[:100])

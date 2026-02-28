@@ -58,7 +58,7 @@ class GroqClient:
 
         for attempt in range(self.max_retries):
             try:
-                logger.info(
+                logger.debug(
                     "groq_extraction_attempt",
                     attempt=attempt + 1,
                     max_retries=self.max_retries,
@@ -89,7 +89,7 @@ class GroqClient:
                     validated = schema(**result)
                     result = validated.model_dump()
 
-                logger.info(
+                logger.debug(
                     "groq_extraction_success",
                     attempt=attempt + 1,
                     keys=list(result.keys()),
@@ -108,7 +108,7 @@ class GroqClient:
                 # Exponential backoff
                 if attempt < self.max_retries - 1:
                     sleep_time = 2 ** attempt
-                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    logger.debug("retrying_after_delay", seconds=sleep_time)
                     time.sleep(sleep_time)
 
         # All retries exhausted
@@ -219,7 +219,7 @@ class OpenAIClient:
 
         for attempt in range(self.max_retries):
             try:
-                logger.info(
+                logger.debug(
                     "openai_extraction_attempt",
                     attempt=attempt + 1,
                     model=self.model,
@@ -250,7 +250,7 @@ class OpenAIClient:
                     validated = schema(**result)
                     result = validated.model_dump()
 
-                logger.info(
+                logger.debug(
                     "openai_extraction_success",
                     attempt=attempt + 1,
                     keys=list(result.keys()),
@@ -269,7 +269,7 @@ class OpenAIClient:
                 # Exponential backoff
                 if attempt < self.max_retries - 1:
                     sleep_time = 2 ** attempt
-                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    logger.debug("retrying_after_delay", seconds=sleep_time)
                     time.sleep(sleep_time)
 
         # All retries exhausted
@@ -320,7 +320,7 @@ class GeminiClient:
 
         for attempt in range(self.max_retries):
             try:
-                logger.info(
+                logger.debug(
                     "gemini_extraction_attempt",
                     attempt=attempt + 1,
                     model=self.model,
@@ -350,7 +350,7 @@ class GeminiClient:
                     validated = schema(**result)
                     result = validated.model_dump()
 
-                logger.info(
+                logger.debug(
                     "gemini_extraction_success",
                     attempt=attempt + 1,
                     keys=list(result.keys()),
@@ -369,7 +369,7 @@ class GeminiClient:
                 # Exponential backoff
                 if attempt < self.max_retries - 1:
                     sleep_time = 2 ** attempt
-                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    logger.debug("retrying_after_delay", seconds=sleep_time)
                     time.sleep(sleep_time)
 
         # All retries exhausted
@@ -420,7 +420,7 @@ class AnthropicClient:
 
         for attempt in range(self.max_retries):
             try:
-                logger.info(
+                logger.debug(
                     "anthropic_extraction_attempt",
                     attempt=attempt + 1,
                     model=self.model,
@@ -458,7 +458,7 @@ class AnthropicClient:
                     validated = schema(**result)
                     result = validated.model_dump()
 
-                logger.info(
+                logger.debug(
                     "anthropic_extraction_success",
                     attempt=attempt + 1,
                     keys=list(result.keys()),
@@ -477,7 +477,7 @@ class AnthropicClient:
                 # Exponential backoff
                 if attempt < self.max_retries - 1:
                     sleep_time = 2 ** attempt
-                    logger.info("retrying_after_delay", seconds=sleep_time)
+                    logger.debug("retrying_after_delay", seconds=sleep_time)
                     time.sleep(sleep_time)
 
         # All retries exhausted

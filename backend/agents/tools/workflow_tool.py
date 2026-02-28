@@ -26,7 +26,6 @@ class WorkflowTool:
     def __init__(self):
         """Initialize the WorkflowTool."""
         self.workflow_manager = WorkflowManager()
-        logger.info("workflow_tool_initialized")
 
     def run(
         self,
@@ -49,7 +48,7 @@ class WorkflowTool:
         Returns:
             A dictionary containing the result of the action
         """
-        logger.info("workflow_tool_run", action=action[:100])
+        logger.debug("workflow_tool_run", action=action[:100])
 
         # Parse action into command and parameters
         parsed = self._parse_action(action)
@@ -155,7 +154,7 @@ class WorkflowTool:
                     "anomalies": state.get("anomalies", []),
                 })
 
-            logger.info("workflow_tool_quarantined_list", count=len(simplified_workflows))
+            logger.debug("workflow_tool_quarantined_list", count=len(simplified_workflows))
 
             return {
                 "status": "success",
@@ -198,7 +197,7 @@ class WorkflowTool:
                 "anomalies": state.get("anomalies", []),
             }
 
-            logger.info("workflow_tool_status_retrieved", workflow_id=workflow_id)
+            logger.debug("workflow_tool_status_retrieved", workflow_id=workflow_id)
 
             return {
                 "status": "success",
@@ -229,7 +228,7 @@ class WorkflowTool:
 
             final_state = self.workflow_manager.resume_workflow(workflow_id, human_feedback)
 
-            logger.info(
+            logger.debug(
                 "workflow_tool_resumed",
                 workflow_id=workflow_id,
                 approved=approved,

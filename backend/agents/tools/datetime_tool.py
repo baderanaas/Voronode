@@ -41,8 +41,6 @@ class DateTimeTool:
         text = f"{query} {action}".lower()
         now = datetime.now()
 
-        logger.info("datetime_tool_executing", action=action[:50])
-
         # Pattern: "current date" or "today"
         if any(keyword in text for keyword in ["current date", "today", "what day"]):
             result = {
@@ -51,7 +49,6 @@ class DateTimeTool:
                 "timestamp": now.isoformat(),
                 "formatted": now.strftime("%B %d, %Y"),
             }
-            logger.info("datetime_current_date", date=result["date"])
             return result
 
         # Pattern: "current time" or "what time"
@@ -61,7 +58,6 @@ class DateTimeTool:
                 "timestamp": now.isoformat(),
                 "formatted": now.strftime("%I:%M %p"),
             }
-            logger.info("datetime_current_time", time=result["time"])
             return result
 
         # Pattern: "X days ago"
@@ -74,7 +70,6 @@ class DateTimeTool:
                 "days_ago": days,
                 "formatted": past_date.strftime("%B %d, %Y"),
             }
-            logger.info("datetime_days_ago", days=days, date=result["date"])
             return result
 
         # Pattern: "X weeks ago"
@@ -87,7 +82,6 @@ class DateTimeTool:
                 "weeks_ago": weeks,
                 "formatted": past_date.strftime("%B %d, %Y"),
             }
-            logger.info("datetime_weeks_ago", weeks=weeks, date=result["date"])
             return result
 
         # Pattern: "last month" or "previous month"
@@ -100,7 +94,6 @@ class DateTimeTool:
                 "end_date": last_day_last_month.strftime("%Y-%m-%d"),
                 "month": last_day_last_month.strftime("%B %Y"),
             }
-            logger.info("datetime_last_month", month=result["month"])
             return result
 
         # Pattern: "this month"
@@ -111,7 +104,6 @@ class DateTimeTool:
                 "end_date": now.strftime("%Y-%m-%d"),
                 "month": now.strftime("%B %Y"),
             }
-            logger.info("datetime_this_month", month=result["month"])
             return result
 
         # Pattern: "last quarter"
@@ -130,7 +122,6 @@ class DateTimeTool:
                 "end_date": last_quarter_end.strftime("%Y-%m-%d"),
                 "quarter": f"Q{current_quarter - 1 if current_quarter > 1 else 4} {last_quarter_start.year}",
             }
-            logger.info("datetime_last_quarter", quarter=result["quarter"])
             return result
 
         # Pattern: "this quarter"
@@ -144,7 +135,6 @@ class DateTimeTool:
                 "end_date": now.strftime("%Y-%m-%d"),
                 "quarter": f"Q{current_quarter} {now.year}",
             }
-            logger.info("datetime_this_quarter", quarter=result["quarter"])
             return result
 
         # Pattern: "last year"
@@ -155,7 +145,6 @@ class DateTimeTool:
                 "end_date": f"{last_year}-12-31",
                 "year": str(last_year),
             }
-            logger.info("datetime_last_year", year=result["year"])
             return result
 
         # Pattern: "this year" or "year to date" or "YTD"
@@ -165,7 +154,6 @@ class DateTimeTool:
                 "end_date": now.strftime("%Y-%m-%d"),
                 "year": str(now.year),
             }
-            logger.info("datetime_this_year", year=result["year"])
             return result
 
         # Pattern: "overdue" - any date before today
@@ -177,7 +165,6 @@ class DateTimeTool:
                 "comparison": "less_than",
                 "reference_date": now.strftime("%Y-%m-%d"),
             }
-            logger.info("datetime_overdue", cutoff=result["cutoff_date"])
             return result
 
         # Default: return current date/time
@@ -188,5 +175,4 @@ class DateTimeTool:
             "day_of_week": now.strftime("%A"),
             "formatted": now.strftime("%B %d, %Y at %I:%M %p"),
         }
-        logger.info("datetime_default", date=result["date"])
         return result

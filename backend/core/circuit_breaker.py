@@ -76,7 +76,7 @@ class CircuitBreaker:
         if self.state == CircuitState.OPEN:
             # Check if timeout has passed
             if self._should_attempt_reset():
-                logger.info("circuit_breaker_half_open", timeout_passed=True)
+                logger.debug("circuit_breaker_half_open", timeout_passed=True)
                 self.state = CircuitState.HALF_OPEN
             else:
                 logger.warning("circuit_breaker_open", failures=self.failure_count)

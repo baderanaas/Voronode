@@ -68,7 +68,7 @@ class CypherQueryTool:
                 "status": "success" | "failed"
             }
         """
-        logger.info("cypher_tool_executing", action=action[:100])
+        logger.debug("cypher_tool_executing", action=action[:100])
 
         # Generate Cypher query from action
         cypher_query = self._generate_cypher(action, query, context, user_id)
@@ -80,11 +80,11 @@ class CypherQueryTool:
                 "status": "failed",
             }
 
-        logger.info("cypher_generated", query=cypher_query[:200])
+        logger.debug("cypher_generated", query=cypher_query[:200])
 
         # Inject user_id filter in code — never trust the LLM to do it
         cypher_query, params = self._inject_user_filter(cypher_query, user_id)
-        logger.info("cypher_user_filter_applied", user_id=user_id)
+        logger.debug("cypher_user_filter_applied", user_id=user_id)
 
         # Execute query
         try:
@@ -93,7 +93,7 @@ class CypherQueryTool:
             # Serialize Neo4j types to JSON-compatible types
             serialized_results = self._serialize_neo4j_types(results)
 
-            logger.info("cypher_executed", result_count=len(serialized_results))
+            logger.debug("cypher_executed", result_count=len(serialized_results))
 
             return {
                 "cypher_query": cypher_query,
@@ -177,7 +177,7 @@ class CypherQueryTool:
             # The schema parameter ensures Pydantic validation before returning
             if isinstance(response, dict) and "query" in response:
                 cypher = response["query"]
-                logger.info("cypher_validation_passed", query_length=len(cypher))
+                logger.debug("cypher_validation_passed", query_length=len(cypher))
             else:
                 # Fallback: try to extract query
                 logger.warning("unexpected_response_format", response=response)

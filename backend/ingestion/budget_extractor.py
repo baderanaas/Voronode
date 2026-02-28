@@ -45,7 +45,7 @@ class BudgetExtractor:
                 "metadata": {...}
             }
         """
-        logger.info("budget_extraction_started", file_path=str(file_path))
+        logger.debug("budget_extraction_started", file_path=str(file_path))
 
         try:
             # Step 1: Read file with pandas
@@ -60,7 +60,7 @@ class BudgetExtractor:
             # Step 4: Validate and structure with LLM
             validated_budget = self._validate_with_llm(budget_lines, project_metadata)
 
-            logger.info(
+            logger.debug(
                 "budget_extraction_complete",
                 project_id=validated_budget.get("project_id"),
                 line_count=len(validated_budget["budget_lines"]),
@@ -102,7 +102,7 @@ class BudgetExtractor:
         # Drop completely empty rows
         df = df.dropna(how="all")
 
-        logger.info("budget_file_read", rows=len(df), columns=list(df.columns))
+        logger.debug("budget_file_read", rows=len(df), columns=list(df.columns))
 
         return df
 
@@ -194,7 +194,7 @@ class BudgetExtractor:
                 "Required columns not found. Need at least: Cost Code and Budget/Allocated columns."
             )
 
-        logger.info(
+        logger.debug(
             "columns_matched",
             cost_code=cost_code_col,
             description=description_col,
@@ -252,7 +252,7 @@ class BudgetExtractor:
                 "remaining": float(remaining),
             })
 
-        logger.info("budget_lines_parsed", count=len(budget_lines))
+        logger.debug("budget_lines_parsed", count=len(budget_lines))
 
         return budget_lines
 

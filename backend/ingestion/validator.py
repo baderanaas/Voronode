@@ -78,7 +78,7 @@ class InvoiceValidator:
         if settings.enable_semantic_validation:
             anomalies.extend(self._validate_semantics(invoice))
 
-        logger.info(
+        logger.debug(
             "invoice_validation_complete",
             invoice_number=invoice.invoice_number,
             anomalies_found=len(anomalies),

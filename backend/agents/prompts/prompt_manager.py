@@ -34,7 +34,6 @@ class PromptManager:
             keep_trailing_newline=False,
         )
 
-        logger.info("prompt_manager_initialized", templates_dir=str(templates_dir))
 
     def render(self, template_name: str, **kwargs: Any) -> str:
         """

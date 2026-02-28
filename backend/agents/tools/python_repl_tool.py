@@ -102,7 +102,7 @@ class PythonREPLTool:
                 "success": False,
             }
 
-        logger.info("python_repl_executing", code_length=len(code))
+        logger.debug("python_repl_executing", code_length=len(code))
 
         # Security check: validate imports
         security_check = self._check_security(code)
@@ -117,7 +117,7 @@ class PythonREPLTool:
         # Execute code
         try:
             result = self._execute_code(code)
-            logger.info("python_repl_success", output_length=len(str(result)))
+            logger.debug("python_repl_success", output_length=len(str(result)))
 
             return {
                 "result": result,

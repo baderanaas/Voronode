@@ -48,7 +48,7 @@ class WorkflowStore:
                     json.dumps(state),
                 ),
             )
-        logger.info("workflow_state_saved", document_id=document_id, status=state.get("status"))
+        logger.debug("workflow_state_saved", document_id=document_id, status=state.get("status"))
 
     def get_workflow(self, document_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve workflow state by document ID."""
@@ -96,7 +96,7 @@ class WorkflowStore:
             }
             for row in rows
         ]
-        logger.info("quarantined_workflows_retrieved", count=len(workflows))
+        logger.debug("quarantined_workflows_retrieved", count=len(workflows))
         return workflows
 
     def get_all_by_status(
@@ -164,4 +164,4 @@ class WorkflowStore:
                 "DELETE FROM workflow_states WHERE document_id = %s",
                 (document_id,),
             )
-        logger.info("workflow_state_deleted", document_id=document_id)
+        logger.debug("workflow_state_deleted", document_id=document_id)

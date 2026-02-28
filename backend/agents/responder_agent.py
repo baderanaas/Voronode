@@ -58,7 +58,7 @@ class ResponderAgent:
                 }
             }
         """
-        logger.info("responder_formatting", mode=execution_mode)
+        logger.debug("responder_formatting", mode=execution_mode)
 
         # Extract successful results
         results = execution_results.get("results", [])
@@ -164,7 +164,7 @@ class ResponderAgent:
 
         result = self.llm.extract_json(prompt, temperature=0.3)
 
-        logger.info(
+        logger.debug(
             "responder_formatted",
             format=result.get("display_format"),
             has_data=bool(result.get("data")),
@@ -180,7 +180,7 @@ class ResponderAgent:
         BudgetUploadTool result structures, so the LLM can mention real IDs, amounts,
         contractor names, anomalies, etc. rather than treating them as generic query rows.
         """
-        logger.info("responder_formatting_upload")
+        logger.debug("responder_formatting_upload")
 
         prompt = render_prompt(
             "responder/format_upload.j2",
@@ -189,7 +189,7 @@ class ResponderAgent:
 
         result = self.llm.extract_json(prompt, temperature=0.2)
 
-        logger.info(
+        logger.debug(
             "responder_upload_formatted",
             steps=len(execution_results.get("results", [])),
         )
@@ -205,7 +205,7 @@ class ResponderAgent:
         Returns:
             Formatted response with consistent structure
         """
-        logger.info("responder_formatting_generic")
+        logger.debug("responder_formatting_generic")
 
         # Hardcoded generic response for greetings/out-of-scope
         hardcoded_message = (
@@ -231,7 +231,7 @@ class ResponderAgent:
         Returns:
             Formatted response with clarification question
         """
-        logger.info("responder_formatting_clarification")
+        logger.debug("responder_formatting_clarification")
 
         return {
             "response": clarification_text,
@@ -256,7 +256,7 @@ class ResponderAgent:
         Returns:
             Formatted error response
         """
-        logger.info("responder_formatting_error", issues_count=len(issues))
+        logger.debug("responder_formatting_error", issues_count=len(issues))
 
         # Create user-friendly error message
         error_message = (

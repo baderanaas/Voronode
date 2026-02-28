@@ -70,7 +70,7 @@ async def get_graph_stats(current_user: dict = Depends(get_current_user)):
         logger.debug("graph_stats_cache_hit", user_id=user_id)
         return cached
 
-    logger.info("graph_stats_requested", user_id=user_id)
+    logger.debug("graph_stats_requested", user_id=user_id)
     try:
         neo4j_client = Neo4jClient()
 
@@ -114,7 +114,6 @@ async def get_graph_stats(current_user: dict = Depends(get_current_user)):
             if label:
                 stats[f"{label.lower()}_count"] = result["count"]
 
-        logger.info("graph_stats_retrieved", stats=stats)
         _stats_cache.set(user_id, stats)
         return stats
     except Exception as e:
@@ -136,13 +135,13 @@ async def query_graph(query: dict, current_user: dict = Depends(get_current_user
         raise HTTPException(status_code=400, detail="Missing 'query' in request body")
 
     user_id = current_user["id"]
-    logger.info("graph_query_requested", query=cypher_query[:100], user_id=user_id)
+    logger.debug("graph_query_requested", query=cypher_query[:100], user_id=user_id)
 
     try:
         cypher_query, params = _inject_user_filter(cypher_query, user_id)
         neo4j_client = Neo4jClient()
         results = neo4j_client.run_query(cypher_query, parameters=params)
-        logger.info("graph_query_executed", record_count=len(results))
+        logger.debug("graph_query_executed", record_count=len(results))
         return {"records": results, "count": len(results)}
     except Exception as e:
         logger.error("graph_query_failed", error=str(e))

@@ -20,7 +20,6 @@ class WorkflowManager:
         """Initialize workflow manager with compiled graph and storage."""
         self.workflow = compile_workflow_with_checkpoints()
         self.store = WorkflowStore()
-        logger.info("workflow_manager_initialized")
 
     def execute_sync(self, pdf_path: Path, document_type: str = "invoice", user_id: str = "default_user") -> Dict[str, Any]:
         """
@@ -36,7 +35,7 @@ class WorkflowManager:
         document_id = str(uuid.uuid4())
         start_time = time.time()
 
-        logger.info(
+        logger.debug(
             "workflow_execution_started",
             document_id=document_id,
             pdf_path=str(pdf_path),
@@ -107,7 +106,7 @@ class WorkflowManager:
                 # Add processing time
                 final_state["processing_time_ms"] = processing_time_ms
 
-                logger.info(
+                logger.debug(
                     "workflow_execution_complete",
                     document_id=document_id,
                     status=final_state.get("status"),
@@ -159,7 +158,7 @@ class WorkflowManager:
         Returns:
             Final workflow state after resumption
         """
-        logger.info(
+        logger.debug(
             "workflow_resume_started",
             document_id=document_id,
             feedback=human_feedback,
@@ -191,7 +190,7 @@ class WorkflowManager:
             state["risk_level"] = "low"
             state["anomalies"] = []
 
-            logger.info(
+            logger.debug(
                 "workflow_approved_by_human",
                 document_id=document_id,
             )
@@ -204,7 +203,7 @@ class WorkflowManager:
             # Reset retry count to allow re-validation
             state["retry_count"] = 0
 
-            logger.info(
+            logger.debug(
                 "workflow_corrections_applied",
                 document_id=document_id,
                 corrections=corrections,
@@ -231,7 +230,7 @@ class WorkflowManager:
                 # Save final state (preserve original owner)
                 self.store.save_workflow(document_id, final_state, user_id=stored_user_id)
 
-                logger.info(
+                logger.debug(
                     "workflow_resume_complete",
                     document_id=document_id,
                     final_status=final_state.get("status"),

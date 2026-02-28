@@ -68,59 +68,49 @@ class ExecutorAgent:
             from backend.agents.tools.cypher_query_tool import CypherQueryTool
             self.tools["CypherQueryTool"] = CypherQueryTool()
         except ImportError:
-            logger.warning("CypherQueryTool not yet implemented")
             self.tools["CypherQueryTool"] = self._create_placeholder_tool("CypherQueryTool")
 
         try:
             from backend.agents.tools.vector_search_tool import VectorSearchTool
             self.tools["VectorSearchTool"] = VectorSearchTool()
         except ImportError:
-            logger.warning("VectorSearchTool not yet implemented")
             self.tools["VectorSearchTool"] = self._create_placeholder_tool("VectorSearchTool")
 
         try:
             from backend.agents.tools.calculator_tool import CalculatorTool
             self.tools["CalculatorTool"] = CalculatorTool()
         except ImportError:
-            logger.warning("CalculatorTool not yet implemented")
             self.tools["CalculatorTool"] = self._create_placeholder_tool("CalculatorTool")
 
         try:
             from backend.agents.tools.graph_explorer_tool import GraphExplorerTool
             self.tools["GraphExplorerTool"] = GraphExplorerTool()
         except ImportError:
-            logger.warning("GraphExplorerTool not yet implemented")
             self.tools["GraphExplorerTool"] = self._create_placeholder_tool("GraphExplorerTool")
 
         try:
             from backend.agents.tools.compliance_check_tool import ComplianceCheckTool
             self.tools["ComplianceCheckTool"] = ComplianceCheckTool()
         except ImportError:
-            logger.warning("ComplianceCheckTool not yet implemented")
             self.tools["ComplianceCheckTool"] = self._create_placeholder_tool("ComplianceCheckTool")
 
         try:
             from backend.agents.tools.datetime_tool import DateTimeTool
             self.tools["DateTimeTool"] = DateTimeTool()
         except ImportError:
-            logger.warning("DateTimeTool not yet implemented")
             self.tools["DateTimeTool"] = self._create_placeholder_tool("DateTimeTool")
 
         try:
             from backend.agents.tools.web_search_tool import WebSearchTool
             self.tools["WebSearchTool"] = WebSearchTool()
         except ImportError:
-            logger.warning("WebSearchTool not yet implemented")
             self.tools["WebSearchTool"] = self._create_placeholder_tool("WebSearchTool")
 
         try:
             from backend.agents.tools.python_repl_tool import PythonREPLTool
             self.tools["PythonREPLTool"] = PythonREPLTool()
         except ImportError:
-            logger.warning("PythonREPLTool not yet implemented")
             self.tools["PythonREPLTool"] = self._create_placeholder_tool("PythonREPLTool")
-
-        logger.info("executor_tools_initialized", tool_count=len(self.tools))
 
     def _create_placeholder_tool(self, tool_name: str):
         """Create a placeholder tool for tools not yet implemented."""
@@ -302,7 +292,7 @@ class ExecutorAgent:
                 }
             }
         """
-        logger.info("executor_one_way_started", steps=len(plan.get("steps", [])))
+        logger.debug("executor_one_way_started", steps=len(plan.get("steps", [])))
 
         results = []
         start_time = time.time()
@@ -312,7 +302,7 @@ class ExecutorAgent:
             tool_name = step["tool"]
             action = step["action"]
 
-            logger.info("executor_step", step=idx + 1, tool=tool_name)
+            logger.debug("executor_step", step=idx + 1, tool=tool_name)
 
             # Get tool
             tool = self.tools.get(tool_name)
@@ -344,7 +334,7 @@ class ExecutorAgent:
             results.append(step_result)
 
             if execution_result["status"] == "success":
-                logger.info("executor_step_success", step=idx + 1, tool=tool_name)
+                logger.debug("executor_step_success", step=idx + 1, tool=tool_name)
             else:
                 logger.warning(
                     "executor_step_failed",
@@ -364,7 +354,7 @@ class ExecutorAgent:
         else:
             overall_status = "failure"
 
-        logger.info(
+        logger.debug(
             "executor_one_way_complete",
             status=overall_status,
             steps_completed=success_count,
@@ -414,7 +404,7 @@ class ExecutorAgent:
         tool_name = step["tool"]
         action = step["action"]
 
-        logger.info("executor_react_step", tool=tool_name, action=action[:50])
+        logger.debug("executor_react_step", tool=tool_name, action=action[:50])
 
         # Get tool
         tool = self.tools.get(tool_name)
@@ -444,7 +434,7 @@ class ExecutorAgent:
         }
 
         if execution_result["status"] == "success":
-            logger.info("executor_react_step_success", tool=tool_name)
+            logger.debug("executor_react_step_success", tool=tool_name)
         else:
             logger.warning(
                 "executor_react_step_failed",

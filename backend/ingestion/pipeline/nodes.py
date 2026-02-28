@@ -29,13 +29,13 @@ def extract_text_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with raw_text or error
     """
-    logger.info("node_extract_text_started", document_id=state["document_id"])
+    logger.debug("node_extract_text_started", document_id=state["document_id"])
 
     try:
         extractor = InvoiceExtractor()
         raw_text = extractor.extract_text_from_pdf(Path(state["document_path"]))
 
-        logger.info(
+        logger.debug(
             "node_extract_text_success",
             document_id=state["document_id"],
             text_length=len(raw_text),
@@ -77,7 +77,7 @@ def structure_invoice_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with extracted_data or retry feedback
     """
-    logger.info(
+    logger.debug(
         "node_structure_invoice_started",
         document_id=state["document_id"],
         retry_count=state.get("retry_count", 0),
@@ -96,7 +96,7 @@ def structure_invoice_node(state: WorkflowState) -> Dict[str, Any]:
         # Calculate confidence based on completeness
         confidence = _calculate_extraction_confidence(invoice_data)
 
-        logger.info(
+        logger.debug(
             "node_structure_invoice_success",
             document_id=state["document_id"],
             invoice_number=invoice_data.get("invoice_number"),
@@ -138,7 +138,7 @@ def validate_invoice_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with anomalies and risk_level
     """
-    logger.info(
+    logger.debug(
         "node_validate_invoice_started",
         document_id=state["document_id"],
     )
@@ -156,7 +156,7 @@ def validate_invoice_node(state: WorkflowState) -> Dict[str, Any]:
         # Convert anomalies to dicts
         anomaly_dicts = [anomaly.to_dict() for anomaly in anomalies]
 
-        logger.info(
+        logger.debug(
             "node_validate_invoice_success",
             document_id=state["document_id"],
             anomalies_count=len(anomalies),
@@ -203,7 +203,7 @@ def critic_agent_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with critic_feedback and incremented retry_count
     """
-    logger.info(
+    logger.debug(
         "node_critic_agent_started",
         document_id=state["document_id"],
         anomalies_count=len(state.get("anomalies", [])),
@@ -245,7 +245,7 @@ Return ONLY the correction instructions, be concise and actionable.
 
         retry_count = state.get("retry_count", 0) + 1
 
-        logger.info(
+        logger.debug(
             "node_critic_agent_success",
             document_id=state["document_id"],
             retry_count=retry_count,
@@ -291,14 +291,14 @@ def compliance_audit_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with compliance_anomalies
     """
-    logger.info(
+    logger.debug(
         "node_compliance_audit_started",
         document_id=state["document_id"],
     )
 
     # Skip if compliance auditing is disabled
     if not settings.enable_compliance_audit:
-        logger.info("Compliance audit disabled, skipping")
+        logger.debug("Compliance audit disabled, skipping")
         return {"compliance_anomalies": []}
 
     try:
@@ -340,7 +340,7 @@ def compliance_audit_node(state: WorkflowState) -> Dict[str, Any]:
             anomaly_dicts, existing_anomalies
         )
 
-        logger.info(
+        logger.debug(
             "node_compliance_audit_success",
             document_id=state["document_id"],
             compliance_anomalies_count=len(compliance_anomalies),
@@ -384,7 +384,7 @@ def quarantine_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with paused=True
     """
-    logger.info(
+    logger.warning(
         "node_quarantine_started",
         document_id=state["document_id"],
         risk_level=state.get("risk_level"),
@@ -406,7 +406,7 @@ def quarantine_node(state: WorkflowState) -> Dict[str, Any]:
     else:
         pause_reason = "Manual review required"
 
-    logger.info(
+    logger.warning(
         "node_quarantine_complete",
         document_id=state["document_id"],
         pause_reason=pause_reason,
@@ -430,7 +430,7 @@ def insert_graph_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with graph_updated=True and neo4j_id
     """
-    logger.info(
+    logger.debug(
         "node_insert_graph_started",
         document_id=state["document_id"],
     )
@@ -444,7 +444,7 @@ def insert_graph_node(state: WorkflowState) -> Dict[str, Any]:
             invoice, user_id=state.get("user_id") or "default_user"
         )
 
-        logger.info(
+        logger.debug(
             "node_insert_graph_success",
             document_id=state["document_id"],
             neo4j_id=invoice_id,
@@ -487,7 +487,7 @@ def embed_vector_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state (no critical changes)
     """
-    logger.info(
+    logger.debug(
         "node_embed_vector_started",
         document_id=state["document_id"],
     )
@@ -521,7 +521,7 @@ def embed_vector_node(state: WorkflowState) -> Dict[str, Any]:
             },
         )
 
-        logger.info(
+        logger.debug(
             "node_embed_vector_success",
             document_id=state["document_id"],
         )
@@ -549,7 +549,7 @@ def finalize_node(state: WorkflowState) -> Dict[str, Any]:
     Returns:
         Updated state with final_report and status=completed
     """
-    logger.info(
+    logger.debug(
         "node_finalize_started",
         document_id=state["document_id"],
     )
@@ -567,7 +567,7 @@ def finalize_node(state: WorkflowState) -> Dict[str, Any]:
         "validation_summary": state.get("validation_results", []),
     }
 
-    logger.info(
+    logger.debug(
         "node_finalize_complete",
         document_id=state["document_id"],
         final_report=final_report,

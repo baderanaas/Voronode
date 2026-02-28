@@ -22,14 +22,14 @@ def check_for_critical_failure(
         "continue" if successful, "error" if critical failure
     """
     if state.get("status") == "failed":
-        logger.info(
+        logger.debug(
             "routing_critical_failure",
             document_id=state["document_id"],
             route="error",
         )
         return "error"
 
-    logger.info(
+    logger.debug(
         "routing_extraction_success",
         document_id=state["document_id"],
         route="continue",
@@ -60,7 +60,7 @@ def should_retry_extraction(
 
     # Check if extraction succeeded
     if extracted_data and extracted_data.get("invoice_number"):
-        logger.info(
+        logger.debug(
             "routing_extraction_valid",
             document_id=state["document_id"],
             route="validate",
@@ -69,7 +69,7 @@ def should_retry_extraction(
 
     # Check retry budget
     if retry_count < max_retries:
-        logger.info(
+        logger.debug(
             "routing_extraction_retry",
             document_id=state["document_id"],
             retry_count=retry_count,
@@ -111,7 +111,7 @@ def route_by_validation_severity(
 
     # Low risk - proceed
     if risk_level == "low":
-        logger.info(
+        logger.debug(
             "routing_validation_clean",
             document_id=state["document_id"],
             risk_level=risk_level,
@@ -121,7 +121,7 @@ def route_by_validation_severity(
 
     # Medium risk - try correction if retries available
     if risk_level == "medium" and retry_count < max_retries:
-        logger.info(
+        logger.debug(
             "routing_validation_correctable",
             document_id=state["document_id"],
             risk_level=risk_level,
@@ -166,7 +166,7 @@ def route_by_compliance_severity(
     compliance_anomalies = state.get("compliance_anomalies", [])
 
     if not compliance_anomalies:
-        logger.info(
+        logger.debug(
             "routing_compliance_clean",
             document_id=state["document_id"],
             route="clean",
@@ -197,7 +197,7 @@ def route_by_compliance_severity(
         return "quarantine"
 
     # Below threshold - proceed with warnings
-    logger.info(
+    logger.debug(
         "routing_compliance_clean_with_warnings",
         document_id=state["document_id"],
         anomalies_count=len(compliance_anomalies),
@@ -225,7 +225,7 @@ def should_continue_after_graph(
     graph_updated = state.get("graph_updated", False)
 
     if graph_updated:
-        logger.info(
+        logger.debug(
             "routing_graph_success",
             document_id=state["document_id"],
             route="embed",

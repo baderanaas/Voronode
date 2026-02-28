@@ -55,7 +55,7 @@ class GraphExplorerTool:
                 "status": "success" | "failed"
             }
         """
-        logger.info("graph_explorer_executing", action=action[:100])
+        logger.debug("graph_explorer_executing", action=action[:100])
 
         # Determine exploration type from action
         action_lower = action.lower()

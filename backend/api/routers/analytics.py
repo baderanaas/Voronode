@@ -64,7 +64,7 @@ async def get_analytics_dashboard(
         logger.debug("analytics_dashboard_cache_hit", user_id=user_id)
         return cached
 
-    logger.info("analytics_dashboard_requested", user_id=user_id)
+    logger.debug("analytics_dashboard_requested", user_id=user_id)
 
     try:
         neo4j = Neo4jClient()
@@ -192,7 +192,7 @@ async def get_analytics_dashboard(
     # ── Summary KPIs ──────────────────────────────────────────────────────────
     total_invoice_value = sum(_to_float(r.get("amount")) for r in invoice_rows)
 
-    logger.info(
+    logger.debug(
         "analytics_dashboard_complete",
         invoices=len(invoice_rows),
         contractors=len(contractor_rows),

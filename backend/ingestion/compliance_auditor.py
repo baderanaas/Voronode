@@ -42,7 +42,7 @@ class ContractComplianceAuditor:
         Returns:
             List of compliance anomalies detected
         """
-        logger.info(
+        logger.debug(
             "Starting compliance audit",
             invoice_id=invoice.id,
             invoice_number=invoice.invoice_number,
@@ -90,7 +90,7 @@ class ContractComplianceAuditor:
         anomalies.extend(self._validate_billing_cap(invoice, contract, contract_terms))
         anomalies.extend(self._validate_scope(invoice, contract_terms))
 
-        logger.info(
+        logger.debug(
             "Compliance audit completed",
             invoice_id=invoice.id,
             anomalies_found=len(anomalies),
